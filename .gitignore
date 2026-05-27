@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+build/
+out-tsc/
+*.tsbuildinfo
+
+# Nx
+.nx/cache
+.nx/workspace-data
+
+# Vite
+apps/frontend/dev-dist/
+
+# Drizzle generated artifacts are versioned, but local SQL dumps are not
+*.sql.local
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Editor / OS
+.DS_Store
+.idea/
+*.swp
+.vscode/*
+!.vscode/extensions.json
+
+# Coverage / test
+coverage/
+.vitest/
+
+.claude/settings.local.json

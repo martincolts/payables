@@ -1,0 +1,21 @@
+{
+  "name": "payables",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Accounts Payable MVP — Nx + pnpm monorepo (Hono backend, React frontend)",
+  "packageManager": "pnpm@11.4.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "nx run-many -t build",
+    "serve": "nx run-many -t serve",
+    "typecheck": "nx run-many -t typecheck",
+    "lint": "nx run-many -t lint"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "nx": "^22.7.4",
+    "typescript": "^5.7.0"
+  }
+}
