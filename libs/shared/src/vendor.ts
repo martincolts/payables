@@ -7,6 +7,7 @@ export const vendorSchema = z.object({
   email: z.email(),
   paymentMethod: paymentMethodSchema,
   bankLast4: z.string().length(4).nullable(),
+  isActive: z.boolean(),
   createdAt: z.string(),
 });
 export type Vendor = z.infer<typeof vendorSchema>;

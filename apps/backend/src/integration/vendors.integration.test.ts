@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { authHeaders, createTestApp, type TestApp } from "../test/testApp.js";
-import { authToken, createVendor } from "../test/factories.js";
+import { approverToken, authToken, createVendor } from "../test/factories.js";
 
 describe("vendors (integration)", () => {
   let app: TestApp;
@@ -136,7 +136,58 @@ describe("vendors (integration)", () => {
 
       expect(page2.items).toHaveLength(1);
       const ids = new Set(page1.items.map((v) => v.id));
-      expect(ids.has(page2.items[0].id)).toBe(false);
+      expect(ids.has(page2.items[0]!.id)).toBe(false);
+    });
+  });
+
+  describe("admin gate", () => {
+    it("rejects create from a non-admin with 403", async () => {
+      const approver = await approverToken(app);
+      const res = await app.client.api.vendors.$post(
+        { json: { name: "Nope", email: "nope@example.com", paymentMethod: "ach" } },
+        authHeaders(approver),
+      );
+      expect(res.status).toBe(403);
+    });
+
+    it("rejects delete from a non-admin with 403", async () => {
+      const approver = await approverToken(app);
+      const vendor = await createVendor(app.client, token);
+      const res = await app.client.api.vendors[":id"].$delete(
+        { param: { id: vendor.id } },
+        authHeaders(approver),
+      );
+      expect(res.status).toBe(403);
+    });
+  });
+
+  describe("DELETE /api/vendors/:id", () => {
+    it("deactivates the vendor and hides it from the list", async () => {
+      const own = await createTestApp();
+      const ownToken = await authToken(own.client);
+      const vendor = await createVendor(own.client, ownToken, { name: "Goodbye Co" });
+
+      const res = await own.client.api.vendors[":id"].$delete(
+        { param: { id: vendor.id } },
+        authHeaders(ownToken),
+      );
+      expect(res.status).toBe(200);
+      expect((await res.json()).isActive).toBe(false);
+
+      const list = await (
+        await own.client.api.vendors.$get({ query: {} }, authHeaders(ownToken))
+      ).json();
+      expect(list.items.some((v) => v.id === vendor.id)).toBe(false);
+
+      await own.cleanup();
+    });
+
+    it("returns 404 for an unknown id", async () => {
+      const res = await app.client.api.vendors[":id"].$delete(
+        { param: { id: "00000000-0000-0000-0000-000000000000" } },
+        authHeaders(token),
+      );
+      expect(res.status).toBe(404);
     });
   });
 });

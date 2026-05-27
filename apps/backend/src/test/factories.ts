@@ -1,6 +1,14 @@
 import { randomUUID } from "node:crypto";
-import type { AuthResponse, PaymentMethod, Vendor } from "@payables/shared";
-import { authHeaders, type TestClient } from "./testApp.js";
+import { eq } from "drizzle-orm";
+import type {
+  AuthResponse,
+  BillListItem,
+  CreateBillInput,
+  PaymentMethod,
+  Vendor,
+} from "@payables/shared";
+import { users } from "../db/schema/index.js";
+import { authHeaders, type TestApp, type TestClient } from "./testApp.js";
 
 /**
  * Test data factories that build state **only through the public API** — the
@@ -67,6 +75,50 @@ export async function createVendor(
   );
   if (res.status !== 201) {
     throw new Error(`createVendor failed: ${res.status} ${await res.text()}`);
+  }
+  return res.json();
+}
+
+/**
+ * Registers a user, demotes them to `approver` in the DB, then logs in so the
+ * returned token carries the non-admin role. Used to exercise the admin gate —
+ * signup always mints admins, so there's no pure-API path to a non-admin token.
+ */
+export async function approverToken(app: TestApp): Promise<string> {
+  const email = `approver-${randomUUID()}@example.com`;
+  const password = "password123";
+  await registerUser(app.client, { email, password });
+  await app.testDb.db.update(users).set({ role: "approver" }).where(eq(users.email, email));
+
+  const res = await app.client.api.auth.login.$post({ json: { email, password } });
+  if (res.status !== 200) {
+    throw new Error(`approverToken login failed: ${res.status} ${await res.text()}`);
+  }
+  return (await res.json()).token;
+}
+
+/** Creates a bill as an authenticated (admin) caller and returns it. */
+export async function createBill(
+  client: TestClient,
+  token: string,
+  vendorId: string,
+  overrides: Partial<CreateBillInput> = {},
+): Promise<BillListItem> {
+  const res = await client.api.bills.$post(
+    {
+      json: {
+        vendorId,
+        invoiceNumber: overrides.invoiceNumber ?? `INV-${randomUUID().slice(0, 8)}`,
+        issueDate: overrides.issueDate ?? "2026-01-01",
+        dueDate: overrides.dueDate ?? "2026-02-01",
+        memo: overrides.memo,
+        lineItems: overrides.lineItems ?? [{ description: "Services", amount: "100.00" }],
+      },
+    },
+    authHeaders(token),
+  );
+  if (res.status !== 201) {
+    throw new Error(`createBill failed: ${res.status} ${await res.text()}`);
   }
   return res.json();
 }

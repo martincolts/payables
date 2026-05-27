@@ -30,6 +30,7 @@ describe("vendorRepo", () => {
       expect(vendor.email).toBe("billing@stripe.com");
       expect(vendor.paymentMethod).toBe("wire");
       expect(vendor.bankLast4).toBe("5678");
+      expect(vendor.isActive).toBe(true);
       expect(typeof vendor.createdAt).toBe("string");
     });
 
@@ -90,6 +91,35 @@ describe("vendorRepo", () => {
       expect(secondPage.total).toBe(all.length);
       // Page 2 continues where page 1 left off.
       expect(secondPage.items[0]!.id).toBe(all[2]!.id);
+    });
+  });
+
+  describe("deactivate", () => {
+    it("marks the vendor inactive and hides it from the list", async () => {
+      const vendor = await repo.create({
+        name: "Soon Gone",
+        email: "bye@v.com",
+        paymentMethod: "ach",
+      });
+
+      const before = await repo.list({ page: 1, pageSize: 100 });
+      expect(before.items.some((v) => v.id === vendor.id)).toBe(true);
+
+      const deactivated = await repo.deactivate(vendor.id);
+      expect(deactivated.isActive).toBe(false);
+
+      // Still fetchable directly (existing bills reference it)...
+      expect((await repo.getById(vendor.id)).isActive).toBe(false);
+      // ...but excluded from the active-only list.
+      const after = await repo.list({ page: 1, pageSize: 100 });
+      expect(after.items.some((v) => v.id === vendor.id)).toBe(false);
+      expect(after.total).toBe(before.total - 1);
+    });
+
+    it("throws NotFoundError for an unknown id", async () => {
+      await expect(
+        repo.deactivate("00000000-0000-0000-0000-000000000000"),
+      ).rejects.toBeInstanceOf(NotFoundError);
     });
   });
 });

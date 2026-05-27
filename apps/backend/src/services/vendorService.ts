@@ -18,6 +18,11 @@ export function createVendorService(repo: VendorRepo) {
       return repo.getById(id);
     },
 
+    /** Soft-deletes a vendor by marking it inactive. */
+    deactivate(id: string): Promise<Vendor> {
+      return repo.deactivate(id);
+    },
+
     async list(query: PaginationQuery): Promise<Paginated<Vendor>> {
       const { items, total } = await repo.list(query);
       return {

@@ -28,6 +28,13 @@ export class UnauthorizedError extends DomainError {
   }
 }
 
+/** Authenticated but not permitted to perform the action. */
+export class ForbiddenError extends DomainError {
+  constructor(message = "Forbidden") {
+    super(message, 403);
+  }
+}
+
 /** Illegal state-machine transition (e.g. paid → draft). */
 export class InvalidTransitionError extends DomainError {
   constructor(from: string, to: string) {

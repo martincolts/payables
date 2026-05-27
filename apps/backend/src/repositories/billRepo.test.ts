@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { bills, users, vendors } from "../db/schema/index.js";
+import { eq } from "drizzle-orm";
+import { billLineItems, bills, users, vendors } from "../db/schema/index.js";
 import { NotFoundError } from "../types/errors.js";
 import { createBillRepo, type BillRepo } from "./billRepo.js";
 import { createTestDb, type TestDb } from "../test/testDb.js";
@@ -148,6 +149,66 @@ describe("billRepo", () => {
     it("throws NotFoundError for an unknown id", async () => {
       await expect(
         repo.getById("00000000-0000-0000-0000-000000000000"),
+      ).rejects.toBeInstanceOf(NotFoundError);
+    });
+  });
+
+  describe("create", () => {
+    it("inserts a bill plus line items and sums the total amount", async () => {
+      const created = await repo.create(
+        {
+          vendorId: acmeId,
+          invoiceNumber: "ACME-NEW",
+          issueDate: "2026-04-01",
+          dueDate: "2026-05-01",
+          memo: "Quarterly retainer",
+          lineItems: [
+            { description: "Design", amount: "30.50" },
+            { description: "Hosting", amount: "19.50", category: "infra" },
+          ],
+        },
+        userId,
+      );
+
+      expect(created.amount).toBe("50.00");
+      expect(created.status).toBe("draft");
+      expect(created.vendorName).toBe("Acme");
+      expect(created.createdBy).toBe(userId);
+
+      const rows = await testDb.db
+        .select()
+        .from(billLineItems)
+        .where(eq(billLineItems.billId, created.id));
+      expect(rows).toHaveLength(2);
+      expect(rows.find((r) => r.description === "Hosting")!.category).toBe("infra");
+    });
+  });
+
+  describe("delete", () => {
+    it("removes the bill and cascades its line items", async () => {
+      const created = await repo.create(
+        {
+          vendorId: globexId,
+          issueDate: "2026-04-01",
+          dueDate: "2026-05-01",
+          lineItems: [{ description: "One-off", amount: "10.00" }],
+        },
+        userId,
+      );
+
+      await repo.delete(created.id);
+
+      await expect(repo.getById(created.id)).rejects.toBeInstanceOf(NotFoundError);
+      const rows = await testDb.db
+        .select()
+        .from(billLineItems)
+        .where(eq(billLineItems.billId, created.id));
+      expect(rows).toHaveLength(0);
+    });
+
+    it("throws NotFoundError when deleting an unknown bill", async () => {
+      await expect(
+        repo.delete("00000000-0000-0000-0000-000000000000"),
       ).rejects.toBeInstanceOf(NotFoundError);
     });
   });

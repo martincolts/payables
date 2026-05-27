@@ -35,3 +35,14 @@ export function authMiddleware(jwtSecret: string) {
     await next();
   });
 }
+
+/**
+ * Gate that allows only `admin` users through. Must run after
+ * {@link authMiddleware}, which populates the user on the context.
+ */
+export const requireAdmin = createMiddleware<AuthEnv>(async (c, next) => {
+  if (c.get("user").role !== "admin") {
+    throw new HTTPException(403, { message: "Admin role required" });
+  }
+  await next();
+});

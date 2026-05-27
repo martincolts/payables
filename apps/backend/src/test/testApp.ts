@@ -50,7 +50,7 @@ export async function createTestApp(): Promise<TestApp> {
 
   const client = hc<AppType>("http://localhost", {
     // Route every RPC call into the in-process app instead of the network.
-    fetch: (input: RequestInfo | URL, init?: RequestInit) =>
+    fetch: (input: Request | string | URL, init?: RequestInit) =>
       app.request(input, init),
   });
 

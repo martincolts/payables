@@ -1,7 +1,12 @@
 import { and, asc, desc, eq, gte, ilike, lte, or, sql, type SQL } from "drizzle-orm";
-import type { BillListItem, ListBillsQuery, PaginationQuery } from "@payables/shared";
+import type {
+  BillListItem,
+  CreateBillInput,
+  ListBillsQuery,
+  PaginationQuery,
+} from "@payables/shared";
 import type { DB } from "../db/client.js";
-import { bills, vendors } from "../db/schema/index.js";
+import { billLineItems, bills, vendors } from "../db/schema/index.js";
 import { NotFoundError } from "../types/errors.js";
 
 export type ListBillsParams = ListBillsQuery & PaginationQuery;
@@ -10,7 +15,20 @@ export type ListBillsParams = ListBillsQuery & PaginationQuery;
 export type BillRepo = {
   list(params: ListBillsParams): Promise<{ items: BillListItem[]; total: number }>;
   getById(id: string): Promise<BillListItem>;
+  /**
+   * Inserts a bill and its line items in one transaction. The bill's total
+   * `amount` is the sum of its line items. Returns the enriched list item.
+   */
+  create(input: CreateBillInput, createdBy: string): Promise<BillListItem>;
+  /** Hard-deletes a bill; line items cascade. Throws if the bill is unknown. */
+  delete(id: string): Promise<void>;
 };
+
+/** Sums money strings ("12.34") exactly via integer cents. */
+function sumAmounts(amounts: readonly string[]): string {
+  const cents = amounts.reduce((acc, a) => acc + Math.round(Number(a) * 100), 0);
+  return (cents / 100).toFixed(2);
+}
 
 type BillRow = typeof bills.$inferSelect;
 
@@ -80,6 +98,45 @@ export function createBillRepo(db: DB): BillRepo {
         .limit(1);
       if (!row) throw new NotFoundError("Bill", id);
       return toBillListItem(row.bill, row.vendorName);
+    },
+
+    async create(input, createdBy) {
+      const amount = sumAmounts(input.lineItems.map((li) => li.amount));
+
+      const billId = await db.transaction(async (tx) => {
+        const [bill] = await tx
+          .insert(bills)
+          .values({
+            vendorId: input.vendorId,
+            invoiceNumber: input.invoiceNumber ?? null,
+            amount,
+            issueDate: input.issueDate,
+            dueDate: input.dueDate,
+            memo: input.memo ?? null,
+            createdBy,
+          })
+          .returning({ id: bills.id });
+
+        await tx.insert(billLineItems).values(
+          input.lineItems.map((li) => ({
+            billId: bill!.id,
+            description: li.description,
+            amount: li.amount,
+            category: li.category ?? null,
+            glAccount: li.glAccount ?? null,
+          })),
+        );
+        return bill!.id;
+      });
+
+      return this.getById(billId);
+    },
+
+    async delete(id) {
+      const deleted = await db.delete(bills).where(eq(bills.id, id)).returning({
+        id: bills.id,
+      });
+      if (deleted.length === 0) throw new NotFoundError("Bill", id);
     },
   };
 }

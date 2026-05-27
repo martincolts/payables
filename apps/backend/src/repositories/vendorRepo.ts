@@ -8,6 +8,9 @@ import { NotFoundError } from "../types/errors.js";
 export type VendorRepo = {
   create(input: CreateVendorInput): Promise<Vendor>;
   getById(id: string): Promise<Vendor>;
+  /** Soft-delete: flips `isActive` to false. Throws if the vendor is unknown. */
+  deactivate(id: string): Promise<Vendor>;
+  /** Lists active vendors only (deactivated ones are hidden). */
   list(params: PaginationQuery): Promise<{ items: Vendor[]; total: number }>;
 };
 
@@ -18,6 +21,7 @@ function toVendor(row: typeof vendors.$inferSelect): Vendor {
     email: row.email,
     paymentMethod: row.paymentMethod,
     bankLast4: row.bankLast4,
+    isActive: row.isActive,
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -43,11 +47,28 @@ export function createVendorRepo(db: DB): VendorRepo {
       return toVendor(row);
     },
 
+    async deactivate(id) {
+      const [row] = await db
+        .update(vendors)
+        .set({ isActive: false })
+        .where(eq(vendors.id, id))
+        .returning();
+      if (!row) throw new NotFoundError("Vendor", id);
+      return toVendor(row);
+    },
+
     async list({ page, pageSize }) {
       const offset = (page - 1) * pageSize;
+      const where = eq(vendors.isActive, true);
       const [rows, [{ count } = { count: 0 }]] = await Promise.all([
-        db.select().from(vendors).orderBy(vendors.name).limit(pageSize).offset(offset),
-        db.select({ count: sql<number>`count(*)::int` }).from(vendors),
+        db
+          .select()
+          .from(vendors)
+          .where(where)
+          .orderBy(vendors.name)
+          .limit(pageSize)
+          .offset(offset),
+        db.select({ count: sql<number>`count(*)::int` }).from(vendors).where(where),
       ]);
       return { items: rows.map(toVendor), total: count };
     },

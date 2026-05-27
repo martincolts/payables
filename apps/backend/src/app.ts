@@ -22,9 +22,10 @@ import { createBillRoutes } from "./routes/billRoutes.js";
  * so the wire contract is inferred — never hand-duplicated.
  */
 export function createApp(config: Config, db: DB) {
-  const vendorService = createVendorService(createVendorRepo(db));
+  const vendorRepo = createVendorRepo(db);
+  const vendorService = createVendorService(vendorRepo);
   const authService = createAuthService(createUserRepo(db), config.JWT_SECRET);
-  const billService = createBillService(createBillRepo(db));
+  const billService = createBillService(createBillRepo(db), vendorRepo);
 
   const app = new Hono<AuthEnv>();
 

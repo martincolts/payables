@@ -5,7 +5,7 @@ import {
   paginationQuerySchema,
 } from "@payables/shared";
 import type { VendorService } from "../services/vendorService.js";
-import type { AuthEnv } from "../middleware/auth.js";
+import { requireAdmin, type AuthEnv } from "../middleware/auth.js";
 
 export function createVendorRoutes(service: VendorService) {
   return new Hono<AuthEnv>()
@@ -13,12 +13,16 @@ export function createVendorRoutes(service: VendorService) {
       const result = await service.list(c.req.valid("query"));
       return c.json(result);
     })
-    .post("/", zValidator("json", createVendorSchema), async (c) => {
+    .post("/", requireAdmin, zValidator("json", createVendorSchema), async (c) => {
       const vendor = await service.create(c.req.valid("json"));
       return c.json(vendor, 201);
     })
     .get("/:id", async (c) => {
       const vendor = await service.getById(c.req.param("id"));
+      return c.json(vendor);
+    })
+    .delete("/:id", requireAdmin, async (c) => {
+      const vendor = await service.deactivate(c.req.param("id"));
       return c.json(vendor);
     });
 }

@@ -1,5 +1,10 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import type { BillStatus } from "@payables/shared";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import type { BillStatus, CreateBillInput } from "@payables/shared";
 import { api } from "../api/client";
 
 export interface BillsQuery {
@@ -27,5 +32,34 @@ export function useBills(query: BillsQuery = {}) {
       if (!res.ok) throw new Error("Couldn't load bills");
       return res.json();
     },
+  });
+}
+
+/** Reads `{ error }` from a failed response, falling back to a default message. */
+async function errorMessage(res: Response, fallback: string): Promise<string> {
+  const body = (await res.json().catch(() => null)) as { error?: string } | null;
+  return body?.error ?? fallback;
+}
+
+export function useCreateBill() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: CreateBillInput) => {
+      const res = await api.api.bills.$post({ json: input });
+      if (!res.ok) throw new Error(await errorMessage(res, "Couldn't create bill"));
+      return res.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["bills"] }),
+  });
+}
+
+export function useDeleteBill() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await api.api.bills[":id"].$delete({ param: { id } });
+      if (!res.ok) throw new Error(await errorMessage(res, "Couldn't delete bill"));
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["bills"] }),
   });
 }
