@@ -25,12 +25,12 @@ import { StatusChip } from "../components/StatusChip";
 import { formatDate, formatMoney, isOverdue } from "../lib/format";
 
 const STATUS_LABELS: Record<BillStatus, string> = {
-  draft: "Borrador",
-  pending_approval: "Pendiente de aprobación",
-  approved: "Aprobada",
-  rejected: "Rechazada",
-  scheduled: "Programada",
-  paid: "Pagada",
+  draft: "Draft",
+  pending_approval: "Pending approval",
+  approved: "Approved",
+  rejected: "Rejected",
+  scheduled: "Scheduled",
+  paid: "Paid",
 };
 
 export function Bills() {
@@ -47,7 +47,7 @@ export function Bills() {
   });
 
   useEffect(() => {
-    if (isError) toast.error("No se pudieron cargar los comprobantes");
+    if (isError) toast.error("Couldn't load bills");
   }, [isError]);
 
   return (
@@ -58,7 +58,7 @@ export function Bills() {
 
       <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ mb: 2 }}>
         <TextField
-          label="Buscar por proveedor o N° de factura"
+          label="Search by vendor or invoice number"
           value={search}
           onChange={(e) => {
             setSearch(e.target.value);
@@ -68,17 +68,17 @@ export function Bills() {
           sx={{ flexGrow: 1 }}
         />
         <FormControl size="small" sx={{ minWidth: 220 }}>
-          <InputLabel id="status-filter-label">Estado</InputLabel>
+          <InputLabel id="status-filter-label">Status</InputLabel>
           <Select
             labelId="status-filter-label"
-            label="Estado"
+            label="Status"
             value={status}
             onChange={(e) => {
               setStatus(e.target.value as BillStatus | "");
               setPage(0);
             }}
           >
-            <MenuItem value="">Todos</MenuItem>
+            <MenuItem value="">All</MenuItem>
             {billStatuses.map((s) => (
               <MenuItem key={s} value={s}>
                 {STATUS_LABELS[s]}
@@ -90,17 +90,17 @@ export function Bills() {
 
       {isLoading ? (
         <Box sx={{ display: "flex", justifyContent: "center", p: 4 }}>
-          <CircularProgress aria-label="Cargando comprobantes" />
+          <CircularProgress aria-label="Loading bills" />
         </Box>
       ) : data && data.items.length > 0 ? (
         <TableContainer component={Paper} variant="outlined">
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell>Proveedor</TableCell>
-                <TableCell>Estado</TableCell>
-                <TableCell align="right">Monto</TableCell>
-                <TableCell>Vencimiento</TableCell>
+                <TableCell>Vendor</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell align="right">Amount</TableCell>
+                <TableCell>Due date</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -129,7 +129,7 @@ export function Bills() {
                         sx={{ fontWeight: overdue ? 600 : 400 }}
                       >
                         {formatDate(bill.dueDate)}
-                        {overdue && " · Vencida"}
+                        {overdue && " · Overdue"}
                       </Typography>
                     </TableCell>
                   </TableRow>
@@ -148,12 +148,12 @@ export function Bills() {
               setPage(0);
             }}
             rowsPerPageOptions={[10, 20, 50]}
-            labelRowsPerPage="Filas por página"
-            labelDisplayedRows={({ from, to, count }) => `${from}–${to} de ${count}`}
+            labelRowsPerPage="Rows per page"
+            labelDisplayedRows={({ from, to, count }) => `${from}–${to} of ${count}`}
           />
         </TableContainer>
       ) : (
-        <Typography color="text.secondary">No hay comprobantes para mostrar.</Typography>
+        <Typography color="text.secondary">No bills to show.</Typography>
       )}
     </Box>
   );

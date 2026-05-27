@@ -29,7 +29,7 @@ export function Signup() {
       {
         onSuccess: (res) => {
           setSession(res);
-          toast.success(`¡Bienvenido, ${res.user.name}!`);
+          toast.success(`Welcome, ${res.user.name}!`);
           navigate("/", { replace: true });
         },
         onError: (err) => toast.error(err.message),
@@ -51,15 +51,15 @@ export function Signup() {
       <Card sx={{ width: "100%", maxWidth: 400 }}>
         <CardContent>
           <Typography variant="h5" component="h1" gutterBottom>
-            Crear cuenta
+            Create account
           </Typography>
           <Typography color="text.secondary" sx={{ mb: 3 }}>
-            Registrate para empezar a gestionar tus pagos.
+            Sign up to start managing your payments.
           </Typography>
           <Box component="form" onSubmit={onSubmit}>
             <Stack spacing={2}>
               <TextField
-                label="Nombre"
+                label="Name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 autoComplete="name"
@@ -67,7 +67,7 @@ export function Signup() {
                 fullWidth
               />
               <TextField
-                label="Correo"
+                label="Email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -76,14 +76,14 @@ export function Signup() {
                 fullWidth
               />
               <TextField
-                label="Contraseña"
+                label="Password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="new-password"
                 required
                 fullWidth
-                helperText="Mínimo 8 caracteres"
+                helperText="At least 8 characters"
               />
               <Button
                 type="submit"
@@ -91,14 +91,14 @@ export function Signup() {
                 size="large"
                 disabled={signup.isPending}
               >
-                {signup.isPending ? "Creando…" : "Crear cuenta"}
+                {signup.isPending ? "Creating…" : "Create account"}
               </Button>
             </Stack>
           </Box>
           <Typography variant="body2" sx={{ mt: 3 }}>
-            ¿Ya tenés cuenta?{" "}
+            Already have an account?{" "}
             <MuiLink component={RouterLink} to="/login">
-              Ingresar
+              Sign in
             </MuiLink>
           </Typography>
         </CardContent>

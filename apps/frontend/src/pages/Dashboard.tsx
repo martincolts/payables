@@ -34,7 +34,7 @@ export function Dashboard() {
   const { data, isLoading, isError } = useBills({ page: 1, pageSize: 100 });
 
   useEffect(() => {
-    if (isError) toast.error("No se pudieron cargar las métricas");
+    if (isError) toast.error("Couldn't load metrics");
   }, [isError]);
 
   const bills = data?.items ?? [];
@@ -47,37 +47,37 @@ export function Dashboard() {
   return (
     <Box>
       <Typography variant="h5" component="h1" gutterBottom>
-        Panel
+        Dashboard
       </Typography>
 
       {isLoading ? (
         <Box sx={{ display: "flex", justifyContent: "center", p: 4 }}>
-          <CircularProgress aria-label="Cargando métricas" />
+          <CircularProgress aria-label="Loading metrics" />
         </Box>
       ) : (
         <>
           <Grid container spacing={2} sx={{ mb: 3 }}>
             <Grid size={{ xs: 12, sm: 4 }}>
-              <MetricCard label="Total por pagar" value={formatMoney(String(outstanding))} />
+              <MetricCard label="Total outstanding" value={formatMoney(String(outstanding))} />
             </Grid>
             <Grid size={{ xs: 12, sm: 4 }}>
               <MetricCard
-                label="Vencidas"
+                label="Overdue"
                 value={String(overdueCount)}
                 color={overdueCount > 0 ? "error.main" : undefined}
               />
             </Grid>
             <Grid size={{ xs: 12, sm: 4 }}>
-              <MetricCard label="Pendientes de aprobación" value={String(pendingCount)} />
+              <MetricCard label="Pending approval" value={String(pendingCount)} />
             </Grid>
           </Grid>
 
           <Stack direction="row" spacing={2} useFlexGap sx={{ flexWrap: "wrap" }}>
             <Button variant="contained" component={Link} to="/bills">
-              Ver comprobantes
+              View bills
             </Button>
             <Button variant="outlined" component={Link} to="/vendors">
-              Ver proveedores
+              View vendors
             </Button>
           </Stack>
         </>

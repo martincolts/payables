@@ -1,5 +1,5 @@
-const moneyFmt = new Intl.NumberFormat("es-AR", { style: "currency", currency: "USD" });
-const dateFmt = new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "short", year: "numeric" });
+const moneyFmt = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+const dateFmt = new Intl.DateTimeFormat("en-US", { day: "2-digit", month: "short", year: "numeric" });
 
 /** Formats a NUMERIC string (e.g. "1250.00") as currency. */
 export function formatMoney(amount: string): string {

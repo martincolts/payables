@@ -18,21 +18,21 @@ import { useVendors } from "../queries/useVendors";
 
 const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   ach: "ACH",
-  wire: "Transferencia",
-  check: "Cheque",
+  wire: "Wire transfer",
+  check: "Check",
 };
 
 export function Vendors() {
   const { data, isLoading, isError } = useVendors();
 
   useEffect(() => {
-    if (isError) toast.error("No se pudieron cargar los proveedores");
+    if (isError) toast.error("Couldn't load vendors");
   }, [isError]);
 
   if (isLoading) {
     return (
       <Box sx={{ display: "flex", justifyContent: "center", p: 4 }}>
-        <CircularProgress aria-label="Cargando proveedores" />
+        <CircularProgress aria-label="Loading vendors" />
       </Box>
     );
   }
@@ -40,16 +40,16 @@ export function Vendors() {
   return (
     <Box>
       <Typography variant="h5" component="h1" gutterBottom>
-        Proveedores
+        Vendors
       </Typography>
       {data && data.items.length > 0 ? (
         <TableContainer component={Paper} variant="outlined">
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell>Nombre</TableCell>
-                <TableCell>Correo</TableCell>
-                <TableCell>Método de pago</TableCell>
+                <TableCell>Name</TableCell>
+                <TableCell>Email</TableCell>
+                <TableCell>Payment method</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -74,7 +74,7 @@ export function Vendors() {
           </Table>
         </TableContainer>
       ) : (
-        <Typography color="text.secondary">Todavía no hay proveedores.</Typography>
+        <Typography color="text.secondary">No vendors yet.</Typography>
       )}
     </Box>
   );

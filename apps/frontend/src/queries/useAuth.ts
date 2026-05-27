@@ -14,7 +14,7 @@ export function useLogin() {
   return useMutation({
     mutationFn: async (input: LoginInput) => {
       const res = await api.api.auth.login.$post({ json: input });
-      return unwrap(res, "No se pudo iniciar sesión");
+      return unwrap(res, "Couldn't sign in");
     },
   });
 }
@@ -23,7 +23,7 @@ export function useSignup() {
   return useMutation({
     mutationFn: async (input: SignupInput) => {
       const res = await api.api.auth.signup.$post({ json: input });
-      return unwrap(res, "No se pudo crear la cuenta");
+      return unwrap(res, "Couldn't create account");
     },
   });
 }

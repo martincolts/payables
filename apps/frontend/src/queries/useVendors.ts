@@ -8,7 +8,7 @@ export function useVendors(page = 1, pageSize = 20) {
       const res = await api.api.vendors.$get({
         query: { page: String(page), pageSize: String(pageSize) },
       });
-      if (!res.ok) throw new Error("No se pudieron cargar los proveedores");
+      if (!res.ok) throw new Error("Couldn't load vendors");
       return res.json();
     },
   });

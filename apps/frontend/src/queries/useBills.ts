@@ -24,7 +24,7 @@ export function useBills(query: BillsQuery = {}) {
           ...(search ? { search } : {}),
         },
       });
-      if (!res.ok) throw new Error("No se pudieron cargar los comprobantes");
+      if (!res.ok) throw new Error("Couldn't load bills");
       return res.json();
     },
   });

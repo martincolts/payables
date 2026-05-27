@@ -25,9 +25,9 @@ import { useAuth } from "../auth/AuthContext";
 const DRAWER_WIDTH = 240;
 
 const NAV_ITEMS = [
-  { label: "Panel", to: "/", icon: <DashboardIcon /> },
+  { label: "Dashboard", to: "/", icon: <DashboardIcon /> },
   { label: "Bills", to: "/bills", icon: <ReceiptLongIcon /> },
-  { label: "Proveedores", to: "/vendors", icon: <StorefrontIcon /> },
+  { label: "Vendors", to: "/vendors", icon: <StorefrontIcon /> },
 ] as const;
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -79,7 +79,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           startIcon={<LogoutIcon />}
           onClick={logout}
         >
-          Cerrar sesión
+          Sign out
         </Button>
       </Box>
     </Box>
@@ -97,7 +97,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             color="inherit"
             edge="start"
             onClick={() => setMobileOpen(true)}
-            aria-label="Abrir menú"
+            aria-label="Open menu"
             sx={{ mr: 2 }}
           >
             <MenuIcon />
@@ -111,7 +111,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <Box
         component="nav"
         sx={{ width: { md: DRAWER_WIDTH }, flexShrink: { md: 0 } }}
-        aria-label="Navegación principal"
+        aria-label="Main navigation"
       >
         {/* Temporary drawer on mobile. */}
         <Drawer

@@ -1,14 +1,14 @@
 import { Chip, type ChipProps } from "@mui/material";
 import type { BillStatus } from "@payables/shared";
 
-/** Spanish label + MUI color for each bill lifecycle state. */
+/** Label + MUI color for each bill lifecycle state. */
 const STATUS_META: Record<BillStatus, { label: string; color: ChipProps["color"] }> = {
-  draft: { label: "Borrador", color: "default" },
-  pending_approval: { label: "Pendiente de aprobación", color: "warning" },
-  approved: { label: "Aprobada", color: "info" },
-  rejected: { label: "Rechazada", color: "error" },
-  scheduled: { label: "Programada", color: "primary" },
-  paid: { label: "Pagada", color: "success" },
+  draft: { label: "Draft", color: "default" },
+  pending_approval: { label: "Pending approval", color: "warning" },
+  approved: { label: "Approved", color: "info" },
+  rejected: { label: "Rejected", color: "error" },
+  scheduled: { label: "Scheduled", color: "primary" },
+  paid: { label: "Paid", color: "success" },
 };
 
 export function StatusChip({ status }: { status: BillStatus }) {

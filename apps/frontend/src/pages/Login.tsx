@@ -28,7 +28,7 @@ export function Login() {
       {
         onSuccess: (res) => {
           setSession(res);
-          toast.success(`¡Hola de nuevo, ${res.user.name}!`);
+          toast.success(`Welcome back, ${res.user.name}!`);
           navigate("/", { replace: true });
         },
         onError: (err) => toast.error(err.message),
@@ -53,12 +53,12 @@ export function Login() {
             Payables
           </Typography>
           <Typography color="text.secondary" sx={{ mb: 3 }}>
-            Iniciá sesión para continuar.
+            Sign in to continue.
           </Typography>
           <Box component="form" onSubmit={onSubmit}>
             <Stack spacing={2}>
               <TextField
-                label="Correo"
+                label="Email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -67,7 +67,7 @@ export function Login() {
                 fullWidth
               />
               <TextField
-                label="Contraseña"
+                label="Password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -81,14 +81,14 @@ export function Login() {
                 size="large"
                 disabled={login.isPending}
               >
-                {login.isPending ? "Ingresando…" : "Ingresar"}
+                {login.isPending ? "Signing in…" : "Sign in"}
               </Button>
             </Stack>
           </Box>
           <Typography variant="body2" sx={{ mt: 3 }}>
-            ¿No tenés cuenta?{" "}
+            Don't have an account?{" "}
             <MuiLink component={RouterLink} to="/signup">
-              Crear cuenta
+              Create account
             </MuiLink>
           </Typography>
         </CardContent>
