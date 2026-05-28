@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "./pagination.js";
 
+const isoDate = z.iso.date(); // "YYYY-MM-DD"
+
 /**
  * Actions captured in the org-wide activity log. The set is closed (a Postgres
  * enum on the DB side) so a typo at the call site fails the type check rather
@@ -46,6 +48,8 @@ export type ActivityLogEntry = z.infer<typeof activityLogEntrySchema>;
 export const listActivityLogQuerySchema = z.object({
   userId: z.uuid().optional(),
   action: activityActionSchema.optional(),
+  from: isoDate.optional(),
+  to: isoDate.optional(),
 });
 export type ListActivityLogQuery = z.infer<typeof listActivityLogQuerySchema> &
   z.infer<typeof paginationQuerySchema>;

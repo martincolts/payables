@@ -5,6 +5,7 @@ import {
   CircularProgress,
   FormControl,
   InputLabel,
+  Link as MuiLink,
   MenuItem,
   Paper,
   Select,
@@ -16,8 +17,10 @@ import {
   TableHead,
   TablePagination,
   TableRow,
+  TextField,
   Typography,
 } from "@mui/material";
+import { Link as RouterLink } from "react-router-dom";
 import { toast } from "react-toastify";
 import { activityActions, type ActivityAction } from "@payables/shared";
 import { useActivityLog } from "../queries/useActivityLog";
@@ -77,6 +80,8 @@ export function ActivityLog() {
   const [pageSize, setPageSize] = useState(20);
   const [userId, setUserId] = useState<string>("");
   const [action, setAction] = useState<ActivityAction | "">("");
+  const [from, setFrom] = useState<string>("");
+  const [to, setTo] = useState<string>("");
 
   const { data: members } = useMembers({ pageSize: 100 });
   const { data, isLoading, isError } = useActivityLog({
@@ -84,6 +89,8 @@ export function ActivityLog() {
     pageSize,
     userId: userId || undefined,
     action: action || undefined,
+    from: from || undefined,
+    to: to || undefined,
   });
 
   useEffect(() => {
@@ -141,6 +148,31 @@ export function ActivityLog() {
             ))}
           </Select>
         </FormControl>
+
+        <TextField
+          label="From"
+          type="date"
+          size="small"
+          value={from}
+          onChange={(e) => {
+            setFrom(e.target.value);
+            setPage(0);
+          }}
+          slotProps={{ inputLabel: { shrink: true } }}
+          sx={{ minWidth: 160 }}
+        />
+        <TextField
+          label="To"
+          type="date"
+          size="small"
+          value={to}
+          onChange={(e) => {
+            setTo(e.target.value);
+            setPage(0);
+          }}
+          slotProps={{ inputLabel: { shrink: true } }}
+          sx={{ minWidth: 160 }}
+        />
       </Stack>
 
       {isLoading ? (
@@ -176,9 +208,24 @@ export function ActivityLog() {
                     />
                   </TableCell>
                   <TableCell>
-                    <Typography variant="body2" color="text.secondary">
-                      {metadataSummary(entry.metadata)}
-                    </Typography>
+                    <Stack
+                      direction="row"
+                      spacing={1}
+                      sx={{ alignItems: "center", flexWrap: "wrap" }}
+                    >
+                      <Typography variant="body2" color="text.secondary">
+                        {metadataSummary(entry.metadata)}
+                      </Typography>
+                      {entry.entityType === "bill" && entry.action !== "bill_deleted" && (
+                        <MuiLink
+                          component={RouterLink}
+                          to={`/bills/${entry.entityId}`}
+                          variant="body2"
+                        >
+                          View bill
+                        </MuiLink>
+                      )}
+                    </Stack>
                   </TableCell>
                 </TableRow>
               ))}

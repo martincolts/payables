@@ -7,12 +7,22 @@ export interface ActivityLogQuery {
   pageSize?: number;
   userId?: string;
   action?: ActivityAction;
+  from?: string;
+  to?: string;
 }
 
 export function useActivityLog(query: ActivityLogQuery = {}) {
-  const { page = 1, pageSize = 20, userId, action } = query;
+  const { page = 1, pageSize = 20, userId, action, from, to } = query;
   return useQuery({
-    queryKey: ["activity-log", page, pageSize, userId ?? null, action ?? null],
+    queryKey: [
+      "activity-log",
+      page,
+      pageSize,
+      userId ?? null,
+      action ?? null,
+      from ?? null,
+      to ?? null,
+    ],
     queryFn: async () => {
       const res = await api.api["activity-log"].$get({
         query: {
@@ -20,6 +30,8 @@ export function useActivityLog(query: ActivityLogQuery = {}) {
           pageSize: String(pageSize),
           ...(userId ? { userId } : {}),
           ...(action ? { action } : {}),
+          ...(from ? { from } : {}),
+          ...(to ? { to } : {}),
         },
       });
       if (!res.ok) throw new Error("Couldn't load activity log");

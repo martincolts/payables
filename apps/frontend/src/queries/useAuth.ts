@@ -8,10 +8,34 @@ import type {
 } from "@payables/shared";
 import { api } from "../api/client";
 
+type ErrorBody = {
+  error?: unknown;
+  message?: string;
+};
+
+type ZodIssue = { message?: string; path?: Array<string | number> };
+
+function extractMessage(body: ErrorBody | null): string | null {
+  if (!body) return null;
+  if (typeof body.error === "string") return body.error;
+  if (typeof body.message === "string") return body.message;
+  const err = body.error as { issues?: ZodIssue[] } | undefined;
+  const issues = err?.issues;
+  if (issues && issues.length > 0) {
+    return issues
+      .map((i) => {
+        const field = i.path?.filter((p) => typeof p === "string").join(".");
+        return field ? `${field}: ${i.message ?? "invalid"}` : (i.message ?? "invalid");
+      })
+      .join("; ");
+  }
+  return null;
+}
+
 async function unwrap(res: Response, fallback: string): Promise<AuthResponse> {
   if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(body?.error ?? fallback);
+    const body = (await res.json().catch(() => null)) as ErrorBody | null;
+    throw new Error(extractMessage(body) ?? fallback);
   }
   return res.json() as Promise<AuthResponse>;
 }

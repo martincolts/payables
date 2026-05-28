@@ -1,4 +1,4 @@
-import { and, desc, eq, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gte, lt, sql, type SQL } from "drizzle-orm";
 import type {
   ActivityAction,
   ActivityEntityType,
@@ -65,12 +65,19 @@ export function createActivityLogRepo(db: DbExecutor): ActivityLogRepo {
       });
     },
 
-    async list({ organizationId, page, pageSize, userId, action }) {
+    async list({ organizationId, page, pageSize, userId, action, from, to }) {
       const offset = (page - 1) * pageSize;
 
       const conditions: SQL[] = [eq(activityLog.organizationId, organizationId)];
       if (userId) conditions.push(eq(activityLog.userId, userId));
       if (action) conditions.push(eq(activityLog.action, action));
+      if (from) conditions.push(gte(activityLog.createdAt, new Date(`${from}T00:00:00Z`)));
+      if (to) {
+        // `to` is inclusive — extend to the start of the next UTC day.
+        const end = new Date(`${to}T00:00:00Z`);
+        end.setUTCDate(end.getUTCDate() + 1);
+        conditions.push(lt(activityLog.createdAt, end));
+      }
       const where = and(...conditions);
 
       const [rows, [{ count } = { count: 0 }]] = await Promise.all([

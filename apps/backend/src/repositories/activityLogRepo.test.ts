@@ -163,6 +163,42 @@ describe("activityLogRepo", () => {
       expect(items.every((e) => e.userName !== "Bob")).toBe(true);
     });
 
+    it("filters by inclusive date range", async () => {
+      const today = new Date().toISOString().slice(0, 10);
+      const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000)
+        .toISOString()
+        .slice(0, 10);
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000)
+        .toISOString()
+        .slice(0, 10);
+
+      const todayResult = await repo.list({
+        organizationId: listOrg,
+        page: 1,
+        pageSize: 100,
+        from: today,
+        to: today,
+      });
+      // All seeded entries above were created "now" — they should all match today.
+      expect(todayResult.total).toBe(3);
+
+      const futureResult = await repo.list({
+        organizationId: listOrg,
+        page: 1,
+        pageSize: 100,
+        from: tomorrow,
+      });
+      expect(futureResult.total).toBe(0);
+
+      const pastOnly = await repo.list({
+        organizationId: listOrg,
+        page: 1,
+        pageSize: 100,
+        to: yesterday,
+      });
+      expect(pastOnly.total).toBe(0);
+    });
+
     it("paginates", async () => {
       const first = await repo.list({
         organizationId: listOrg,
