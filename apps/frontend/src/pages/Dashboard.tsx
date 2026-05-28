@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Box,
   Button,
@@ -39,11 +39,13 @@ function MetricCard({
   value,
   color,
   to,
+  children,
 }: {
   label: string;
   value: string;
   color?: string;
   to?: string;
+  children?: ReactNode;
 }) {
   const card = (
     <Card
@@ -64,6 +66,7 @@ function MetricCard({
         <Typography variant="h4" component="div" sx={{ color, fontWeight: 600 }}>
           {value}
         </Typography>
+        {children}
       </CardContent>
     </Card>
   );
@@ -72,6 +75,47 @@ function MetricCard({
     <Link to={to} style={{ textDecoration: "none", color: "inherit", display: "block", height: "100%" }}>
       {card}
     </Link>
+  );
+}
+
+function OutstandingBreakdown({
+  rows,
+}: {
+  rows: { status: BillStatus; amount: number; color: string }[];
+}) {
+  if (rows.length === 0) return null;
+  return (
+    <Stack spacing={0.5} sx={{ mt: 1.5 }}>
+      {rows.map((r) => (
+        <Box
+          key={r.status}
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 1,
+          }}
+        >
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
+            <Box
+              sx={{
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                backgroundColor: r.color,
+                flexShrink: 0,
+              }}
+            />
+            <Typography variant="caption" color="text.secondary" noWrap>
+              {STATUS_LABELS[r.status]}
+            </Typography>
+          </Box>
+          <Typography variant="caption" sx={{ fontVariantNumeric: "tabular-nums" }}>
+            {formatMoney(String(r.amount))}
+          </Typography>
+        </Box>
+      ))}
+    </Stack>
   );
 }
 
@@ -329,8 +373,25 @@ export function Dashboard() {
   }, [statsError]);
 
   const summary = stats?.summary;
-  const outstanding = summary?.totalOutstanding ?? "0";
   const overdueCount = summary?.overdueCount ?? 0;
+
+  const outstandingBreakdown = useMemo(() => {
+    const all = stats?.byStatus ?? [];
+    const filtered = hasStatusFilter
+      ? all.filter((s) => selectedStatuses.includes(s.status))
+      : all;
+    const rows = filtered
+      .map((s) => ({
+        status: s.status,
+        amount: Number(s.totalAmount),
+        color: statusColor(theme, s.status),
+      }))
+      .filter((r) => r.amount > 0)
+      .sort((a, b) => b.amount - a.amount);
+    const total = rows.reduce((acc, r) => acc + r.amount, 0);
+    return { rows, total };
+  }, [stats, hasStatusFilter, selectedStatuses, theme]);
+  const outstanding = String(outstandingBreakdown.total);
   const pendingCount = summary?.pendingApprovalCount ?? 0;
   const paidCount = stats?.byStatus.find((s) => s.status === "paid")?.count ?? 0;
   const failedCount = stats?.byStatus.find((s) => s.status === "payment_failed")?.count ?? 0;
@@ -539,7 +600,9 @@ export function Dashboard() {
         <>
           <Grid container spacing={2} sx={{ mb: 3 }}>
             <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
-              <MetricCard label="Total outstanding" value={formatMoney(outstanding)} />
+              <MetricCard label="Total outstanding" value={formatMoney(outstanding)}>
+                <OutstandingBreakdown rows={outstandingBreakdown.rows} />
+              </MetricCard>
             </Grid>
             <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
               <MetricCard
