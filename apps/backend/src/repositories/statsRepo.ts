@@ -1,9 +1,11 @@
-import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, sql, type SQL } from "drizzle-orm";
 import type {
   BillStatus,
   MonthlyStat,
+  MonthlyStatusStat,
   StatusStat,
   VendorStat,
+  VendorStatusStat,
 } from "@payables/shared";
 import type { DbExecutor } from "../db/client.js";
 import { bills, vendors } from "../db/schema/index.js";
@@ -28,6 +30,7 @@ export type StatsRepo = {
     since: Date,
     until: Date,
     limit?: number,
+    statuses?: BillStatus[],
   ): Promise<VendorStat[]>;
   countsByStatus(
     organizationId: string,
@@ -38,13 +41,28 @@ export type StatsRepo = {
     organizationId: string,
     since: Date,
     until: Date,
+    statuses?: BillStatus[],
   ): Promise<MonthlyStat[]>;
   monthlyByVendor(
     organizationId: string,
     since: Date,
     until: Date,
     vendorIds: string[],
+    statuses?: BillStatus[],
   ): Promise<VendorMonthlyRow[]>;
+  topVendorsByStatus(
+    organizationId: string,
+    since: Date,
+    until: Date,
+    vendorIds: string[],
+    statuses: BillStatus[],
+  ): Promise<VendorStatusStat[]>;
+  monthlyByStatus(
+    organizationId: string,
+    since: Date,
+    until: Date,
+    statuses: BillStatus[],
+  ): Promise<MonthlyStatusStat[]>;
   summary(
     organizationId: string,
     since: Date,
@@ -57,9 +75,14 @@ function toDateOnly(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+function statusFilter(statuses?: BillStatus[]): SQL | undefined {
+  if (!statuses || statuses.length === 0) return undefined;
+  return inArray(bills.status, statuses);
+}
+
 export function createStatsRepo(db: DbExecutor): StatsRepo {
   return {
-    async topVendorsByAmount(organizationId, since, until, limit = 8) {
+    async topVendorsByAmount(organizationId, since, until, limit = 8, statuses) {
       const rows = await db
         .select({
           vendorId: vendors.id,
@@ -74,6 +97,7 @@ export function createStatsRepo(db: DbExecutor): StatsRepo {
             eq(bills.organizationId, organizationId),
             gte(bills.issueDate, toDateOnly(since)),
             lt(bills.issueDate, toDateOnly(until)),
+            statusFilter(statuses),
           ),
         )
         .groupBy(vendors.id, vendors.name)
@@ -101,7 +125,7 @@ export function createStatsRepo(db: DbExecutor): StatsRepo {
       return rows as { status: BillStatus; count: number; totalAmount: string }[];
     },
 
-    async monthlyTotals(organizationId, since, until) {
+    async monthlyTotals(organizationId, since, until, statuses) {
       const rows = await db
         .select({
           month: sql<string>`to_char(date_trunc('month', ${bills.issueDate}), 'YYYY-MM')`,
@@ -114,6 +138,7 @@ export function createStatsRepo(db: DbExecutor): StatsRepo {
             eq(bills.organizationId, organizationId),
             gte(bills.issueDate, toDateOnly(since)),
             lt(bills.issueDate, toDateOnly(until)),
+            statusFilter(statuses),
           ),
         )
         .groupBy(sql`date_trunc('month', ${bills.issueDate})`)
@@ -141,7 +166,7 @@ export function createStatsRepo(db: DbExecutor): StatsRepo {
       );
     },
 
-    async monthlyByVendor(organizationId, since, until, vendorIds) {
+    async monthlyByVendor(organizationId, since, until, vendorIds, statuses) {
       if (vendorIds.length === 0) return [];
       const rows = await db
         .select({
@@ -159,6 +184,7 @@ export function createStatsRepo(db: DbExecutor): StatsRepo {
             gte(bills.issueDate, toDateOnly(since)),
             lt(bills.issueDate, toDateOnly(until)),
             inArray(vendors.id, vendorIds),
+            statusFilter(statuses),
           ),
         )
         .groupBy(
@@ -168,6 +194,54 @@ export function createStatsRepo(db: DbExecutor): StatsRepo {
         )
         .orderBy(sql`date_trunc('month', ${bills.issueDate}) asc`);
       return rows;
+    },
+
+    async topVendorsByStatus(organizationId, since, until, vendorIds, statuses) {
+      if (vendorIds.length === 0 || statuses.length === 0) return [];
+      const rows = await db
+        .select({
+          vendorId: vendors.id,
+          vendorName: vendors.name,
+          status: bills.status,
+          billCount: sql<number>`count(*)::int`,
+          totalAmount: sql<string>`coalesce(sum(${bills.amount}), 0)::text`,
+        })
+        .from(bills)
+        .innerJoin(vendors, eq(bills.vendorId, vendors.id))
+        .where(
+          and(
+            eq(bills.organizationId, organizationId),
+            gte(bills.issueDate, toDateOnly(since)),
+            lt(bills.issueDate, toDateOnly(until)),
+            inArray(vendors.id, vendorIds),
+            inArray(bills.status, statuses),
+          ),
+        )
+        .groupBy(vendors.id, vendors.name, bills.status);
+      return rows as VendorStatusStat[];
+    },
+
+    async monthlyByStatus(organizationId, since, until, statuses) {
+      if (statuses.length === 0) return [];
+      const rows = await db
+        .select({
+          month: sql<string>`to_char(date_trunc('month', ${bills.issueDate}), 'YYYY-MM')`,
+          status: bills.status,
+          billCount: sql<number>`count(*)::int`,
+          totalAmount: sql<string>`coalesce(sum(${bills.amount}), 0)::text`,
+        })
+        .from(bills)
+        .where(
+          and(
+            eq(bills.organizationId, organizationId),
+            gte(bills.issueDate, toDateOnly(since)),
+            lt(bills.issueDate, toDateOnly(until)),
+            inArray(bills.status, statuses),
+          ),
+        )
+        .groupBy(sql`date_trunc('month', ${bills.issueDate})`, bills.status)
+        .orderBy(sql`date_trunc('month', ${bills.issueDate}) asc`);
+      return rows as MonthlyStatusStat[];
     },
   };
 }

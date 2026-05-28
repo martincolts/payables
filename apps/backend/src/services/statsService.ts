@@ -2,6 +2,7 @@ import {
   addMonths,
   defaultStatsWindow,
   monthsBetween,
+  type BillStatus,
   type DashboardStats,
   type MonthKey,
   type MonthlyStat,
@@ -24,22 +25,33 @@ export function createStatsService(repo: StatsRepo) {
       const months = monthsBetween(from, to);
       const since = monthKeyToDate(from);
       const until = monthKeyToDate(addMonths(to, 1));
+      const statuses: BillStatus[] = query.statuses ?? [];
+      const hasStatusFilter = statuses.length > 0;
 
       const today = new Date().toISOString().slice(0, 10);
       const [topVendors, byStatus, monthly, summary] = await Promise.all([
-        repo.topVendorsByAmount(organizationId, since, until),
+        repo.topVendorsByAmount(organizationId, since, until, undefined, statuses),
         repo.countsByStatus(organizationId, since, until),
-        repo.monthlyTotals(organizationId, since, until),
+        repo.monthlyTotals(organizationId, since, until, statuses),
         repo.summary(organizationId, since, until, today),
       ]);
 
       const topIds = topVendors.slice(0, PER_VENDOR_TOP_N).map((v) => v.vendorId);
-      const perVendorRows = await repo.monthlyByVendor(
-        organizationId,
-        since,
-        until,
-        topIds,
-      );
+      const [perVendorRows, topVendorsByStatus, monthlyByStatus] = await Promise.all([
+        repo.monthlyByVendor(organizationId, since, until, topIds, statuses),
+        hasStatusFilter
+          ? repo.topVendorsByStatus(
+              organizationId,
+              since,
+              until,
+              topVendors.map((v) => v.vendorId),
+              statuses,
+            )
+          : Promise.resolve([]),
+        hasStatusFilter
+          ? repo.monthlyByStatus(organizationId, since, until, statuses)
+          : Promise.resolve([]),
+      ]);
 
       return {
         summary,
@@ -55,6 +67,9 @@ export function createStatsService(repo: StatsRepo) {
           from,
           months,
         ),
+        topVendorsByStatus,
+        monthlyByStatus,
+        appliedStatuses: statuses,
         from,
         to,
       };

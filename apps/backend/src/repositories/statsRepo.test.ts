@@ -186,6 +186,79 @@ describe("statsRepo", () => {
     });
   });
 
+  describe("statuses filter", () => {
+    it("topVendorsByAmount filters by statuses", async () => {
+      const rows = await repo.topVendorsByAmount(
+        orgId,
+        EPOCH,
+        FAR_FUTURE,
+        undefined,
+        ["paid"],
+      );
+      expect(rows.map((r) => r.vendorName)).toEqual(["Acme"]);
+      expect(rows[0]!.totalAmount).toBe("100.00");
+    });
+
+    it("monthlyTotals filters by statuses", async () => {
+      const rows = await repo.monthlyTotals(orgId, EPOCH, FAR_FUTURE, [
+        "approved",
+        "pending_approval",
+      ]);
+      const byMonth = Object.fromEntries(rows.map((r) => [r.month, r]));
+      expect(byMonth["2026-02"]!.totalAmount).toBe("1000.00");
+      expect(byMonth["2026-05"]!.totalAmount).toBe("50.00");
+      expect(byMonth["2026-03"]).toBeUndefined();
+      expect(byMonth["2026-04"]).toBeUndefined();
+    });
+  });
+
+  describe("topVendorsByStatus", () => {
+    it("returns one row per vendor/status combo within filter", async () => {
+      const rows = await repo.topVendorsByStatus(
+        orgId,
+        EPOCH,
+        FAR_FUTURE,
+        [acme.id, globex.id, initech.id],
+        ["paid", "approved", "pending_approval"],
+      );
+      const key = (v: string, s: string) => `${v}:${s}`;
+      const m = new Map(rows.map((r) => [key(r.vendorName, r.status), r]));
+      expect(m.get(key("Acme", "paid"))!.totalAmount).toBe("100.00");
+      expect(m.get(key("Globex", "approved"))!.totalAmount).toBe("1000.00");
+      expect(m.get(key("Initech", "pending_approval"))!.totalAmount).toBe(
+        "50.00",
+      );
+      expect(m.get(key("Acme", "draft"))).toBeUndefined();
+    });
+
+    it("returns [] when statuses or vendors empty", async () => {
+      expect(
+        await repo.topVendorsByStatus(orgId, EPOCH, FAR_FUTURE, [], ["paid"]),
+      ).toEqual([]);
+      expect(
+        await repo.topVendorsByStatus(orgId, EPOCH, FAR_FUTURE, [acme.id], []),
+      ).toEqual([]);
+    });
+  });
+
+  describe("monthlyByStatus", () => {
+    it("buckets per (month, status)", async () => {
+      const rows = await repo.monthlyByStatus(orgId, EPOCH, FAR_FUTURE, [
+        "paid",
+        "draft",
+      ]);
+      const key = (m: string, s: string) => `${m}:${s}`;
+      const map = new Map(rows.map((r) => [key(r.month, r.status), r]));
+      expect(map.get(key("2026-03", "paid"))!.totalAmount).toBe("100.00");
+      expect(map.get(key("2026-04", "draft"))!.totalAmount).toBe("200.00");
+      expect(map.get(key("2026-02", "approved"))).toBeUndefined();
+    });
+
+    it("returns [] when statuses empty", async () => {
+      expect(await repo.monthlyByStatus(orgId, EPOCH, FAR_FUTURE, [])).toEqual([]);
+    });
+  });
+
   describe("monthlyTotals", () => {
     it("buckets bills into YYYY-MM groups", async () => {
       const rows = await repo.monthlyTotals(

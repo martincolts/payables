@@ -1,15 +1,39 @@
 import { z } from "zod";
-import { billStatusSchema } from "./enums.js";
+import { billStatusSchema, billStatuses, type BillStatus } from "./enums.js";
 
 export const monthKeySchema = z
   .string()
   .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Expected YYYY-MM");
 export type MonthKey = z.infer<typeof monthKeySchema>;
 
+const statusesParamSchema = z
+  .string()
+  .optional()
+  .transform((s, ctx): BillStatus[] | undefined => {
+    if (!s) return undefined;
+    const parts = s
+      .split(",")
+      .map((p) => p.trim())
+      .filter(Boolean);
+    if (parts.length === 0) return undefined;
+    const valid = new Set<string>(billStatuses);
+    for (const p of parts) {
+      if (!valid.has(p)) {
+        ctx.addIssue({
+          code: "custom",
+          message: `Invalid status: ${p}`,
+        });
+        return z.NEVER;
+      }
+    }
+    return Array.from(new Set(parts)) as BillStatus[];
+  });
+
 export const statsQuerySchema = z
   .object({
     from: monthKeySchema.optional(),
     to: monthKeySchema.optional(),
+    statuses: statusesParamSchema,
   })
   .refine((q) => !(q.from && q.to) || q.from <= q.to, {
     message: "from must be <= to",
@@ -46,6 +70,23 @@ export const vendorMonthlySeriesSchema = z.object({
 });
 export type VendorMonthlySeries = z.infer<typeof vendorMonthlySeriesSchema>;
 
+export const vendorStatusStatSchema = z.object({
+  vendorId: z.uuid(),
+  vendorName: z.string(),
+  status: billStatusSchema,
+  billCount: z.number().int(),
+  totalAmount: z.string(),
+});
+export type VendorStatusStat = z.infer<typeof vendorStatusStatSchema>;
+
+export const monthlyStatusStatSchema = z.object({
+  month: z.string(),
+  status: billStatusSchema,
+  billCount: z.number().int(),
+  totalAmount: z.string(),
+});
+export type MonthlyStatusStat = z.infer<typeof monthlyStatusStatSchema>;
+
 export const dashboardSummarySchema = z.object({
   totalOutstanding: z.string(),
   overdueCount: z.number().int(),
@@ -59,6 +100,9 @@ export const dashboardStatsSchema = z.object({
   byStatus: z.array(statusStatSchema),
   monthly: z.array(monthlyStatSchema),
   monthlyByVendor: z.array(vendorMonthlySeriesSchema),
+  topVendorsByStatus: z.array(vendorStatusStatSchema),
+  monthlyByStatus: z.array(monthlyStatusStatSchema),
+  appliedStatuses: z.array(billStatusSchema),
   from: monthKeySchema,
   to: monthKeySchema,
 });

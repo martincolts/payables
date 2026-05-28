@@ -115,6 +115,45 @@ describe("stats (integration)", () => {
     await own.cleanup();
   });
 
+  it("filters charts by statuses and returns per-status breakdowns", async () => {
+    const own = await createTestApp();
+    const token = await authToken(own.client);
+    const acme = await createVendor(own.client, token, { name: "Acme" });
+
+    await createBill(own.client, token, acme.id, {
+      issueDate: "2026-03-01",
+      dueDate: "2026-03-15",
+      lineItems: [{ description: "x", amount: "100.00" }],
+    });
+
+    const res = await own.client.api.stats.dashboard.$get(
+      { query: { statuses: "draft" } },
+      authHeaders(token),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.appliedStatuses).toEqual(["draft"]);
+    expect(body.topVendors[0]!.vendorName).toBe("Acme");
+    expect(body.topVendorsByStatus.length).toBeGreaterThan(0);
+    expect(body.topVendorsByStatus[0]!.status).toBe("draft");
+    const mar = body.monthlyByStatus.find((m) => m.month === "2026-03");
+    expect(mar!.status).toBe("draft");
+    expect(mar!.totalAmount).toBe("100.00");
+
+    await own.cleanup();
+  });
+
+  it("rejects invalid status values", async () => {
+    const own = await createTestApp();
+    const token = await authToken(own.client);
+    const res = await own.client.api.stats.dashboard.$get(
+      { query: { statuses: "not-a-status" } },
+      authHeaders(token),
+    );
+    expect(res.status).toBe(400);
+    await own.cleanup();
+  });
+
   it("scopes to caller's org", async () => {
     const a = await createTestApp();
     const b = await createTestApp();

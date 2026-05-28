@@ -24,6 +24,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import {
   addMonths,
+  billStatuses,
   currentMonthKey,
   defaultStatsWindow,
   monthsBetween,
@@ -312,7 +313,16 @@ export function Dashboard() {
     return { from: d.from, to: d.to };
   });
   const [monthlyView, setMonthlyView] = useState<MonthlyView>("total");
-  const { data: stats, isLoading: statsLoading, isError: statsError } = useDashboardStats(window);
+  const [selectedStatuses, setSelectedStatuses] = useState<BillStatus[]>([]);
+  const hasStatusFilter = selectedStatuses.length > 0;
+  const { data: stats, isLoading: statsLoading, isError: statsError } =
+    useDashboardStats(window, selectedStatuses);
+
+  function toggleStatus(s: BillStatus) {
+    setSelectedStatuses((prev) =>
+      prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s],
+    );
+  }
 
   useEffect(() => {
     if (statsError) toast.error("Couldn't load stats");
@@ -349,6 +359,73 @@ export function Dashboard() {
   const monthLabels = monthly.map((m) => formatMonthLabel(m.month));
   const monthValues = monthly.map((m) => Number(m.totalAmount));
   const monthCounts = monthly.map((m) => m.billCount);
+
+  const vendorStatusAmount = useMemo(() => {
+    const m = new Map<string, Map<BillStatus, number>>();
+    for (const r of stats?.topVendorsByStatus ?? []) {
+      let inner = m.get(r.vendorId);
+      if (!inner) {
+        inner = new Map();
+        m.set(r.vendorId, inner);
+      }
+      inner.set(r.status, Number(r.totalAmount));
+    }
+    return m;
+  }, [stats]);
+
+  const monthStatusBreakdown = useMemo(() => {
+    const m = new Map<string, Map<BillStatus, { amount: number; count: number }>>();
+    for (const r of stats?.monthlyByStatus ?? []) {
+      let inner = m.get(r.month);
+      if (!inner) {
+        inner = new Map();
+        m.set(r.month, inner);
+      }
+      inner.set(r.status, {
+        amount: Number(r.totalAmount),
+        count: r.billCount,
+      });
+    }
+    return m;
+  }, [stats]);
+
+  const vendorStatusBarSeries = useMemo(() => {
+    if (!hasStatusFilter) return [];
+    return selectedStatuses.map((s) => ({
+      data: vendorBars.ids.map((id) => vendorStatusAmount.get(id)?.get(s) ?? 0),
+      label: STATUS_LABELS[s],
+      color: statusColor(theme, s),
+      stack: "total",
+      valueFormatter: (v: number | null) =>
+        v == null || v === 0 ? "" : formatMoney(String(v)),
+    }));
+  }, [hasStatusFilter, selectedStatuses, vendorBars.ids, vendorStatusAmount, theme]);
+
+  const monthlyAmountByStatusSeries = useMemo(() => {
+    if (!hasStatusFilter) return [];
+    return selectedStatuses.map((s) => ({
+      data: monthly.map((m) => monthStatusBreakdown.get(m.month)?.get(s)?.amount ?? 0),
+      label: STATUS_LABELS[s],
+      color: statusColor(theme, s),
+      area: true,
+      stack: "total",
+      curve: "monotoneX" as const,
+      showMark: !isSm,
+      valueFormatter: (v: number | null) =>
+        v == null || v === 0 ? "" : formatMoney(String(v)),
+    }));
+  }, [hasStatusFilter, selectedStatuses, monthly, monthStatusBreakdown, theme, isSm]);
+
+  const monthlyCountByStatusSeries = useMemo(() => {
+    if (!hasStatusFilter) return [];
+    return selectedStatuses.map((s) => ({
+      data: monthly.map((m) => monthStatusBreakdown.get(m.month)?.get(s)?.count ?? 0),
+      label: STATUS_LABELS[s],
+      color: statusColor(theme, s),
+      stack: "total",
+      valueFormatter: (v: number | null) => (v == null || v === 0 ? "" : String(v)),
+    }));
+  }, [hasStatusFilter, selectedStatuses, monthly, monthStatusBreakdown, theme]);
 
   const vendorSeriesAll = useMemo(() => {
     const series = stats?.monthlyByVendor ?? [];
@@ -412,6 +489,47 @@ export function Dashboard() {
         </Box>
         <RangePicker value={window} onChange={setWindow} />
       </Box>
+
+      <Stack
+        direction="row"
+        spacing={1}
+        useFlexGap
+        sx={{ flexWrap: "wrap", mb: 3, alignItems: "center" }}
+      >
+        <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>
+          Status:
+        </Typography>
+        {billStatuses.map((s) => {
+          const active = selectedStatuses.includes(s);
+          const color = statusColor(theme, s);
+          return (
+            <Chip
+              key={s}
+              label={STATUS_LABELS[s]}
+              size="small"
+              clickable
+              variant={active ? "filled" : "outlined"}
+              onClick={() => toggleStatus(s)}
+              sx={{
+                borderColor: color,
+                backgroundColor: active ? color : "transparent",
+                color: active ? "#fff" : color,
+                "&:hover": {
+                  backgroundColor: active ? color : `${color}22`,
+                },
+              }}
+            />
+          );
+        })}
+        {hasStatusFilter && (
+          <Chip
+            label="Clear"
+            size="small"
+            variant="outlined"
+            onClick={() => setSelectedStatuses([])}
+          />
+        )}
+      </Stack>
 
       {statsLoading && !stats ? (
         <Box sx={{ display: "flex", justifyContent: "center", p: 4 }}>
@@ -490,17 +608,29 @@ export function Dashboard() {
                           tickLabelStyle: { fontSize: 11 },
                         },
                       ]}
-                      series={[
-                        {
-                          data: vendorBars.values,
-                          color: CHART_PRIMARY,
-                          valueFormatter: (v) => (v == null ? "" : formatMoney(String(v))),
-                          label: "Total billed",
-                        },
-                      ]}
+                      series={
+                        hasStatusFilter
+                          ? vendorStatusBarSeries
+                          : [
+                              {
+                                data: vendorBars.values,
+                                color: CHART_PRIMARY,
+                                valueFormatter: (v) =>
+                                  v == null ? "" : formatMoney(String(v)),
+                                label: "Total billed",
+                              },
+                            ]
+                      }
                       borderRadius={4}
-                      margin={{ left: isSm ? 90 : 130, right: 24, top: 16, bottom: 32 }}
-                      hideLegend
+                      margin={{ left: isSm ? 90 : 130, right: 24, top: 16, bottom: hasStatusFilter ? 56 : 32 }}
+                      hideLegend={!hasStatusFilter}
+                      slotProps={{
+                        legend: {
+                          direction: "horizontal",
+                          position: { vertical: "bottom", horizontal: "center" },
+                          sx: { fontSize: 11 },
+                        },
+                      }}
                       grid={{ vertical: true }}
                       onItemClick={(_, item) => {
                         const id = vendorBars.ids[item.dataIndex];
@@ -657,23 +787,25 @@ export function Dashboard() {
                       ]}
                       series={
                         monthlyView === "total"
-                          ? [
-                              {
-                                data: monthValues,
-                                color: CHART_PRIMARY,
-                                area: true,
-                                showMark: !isSm,
-                                curve: "monotoneX",
-                                valueFormatter: (v) =>
-                                  v == null ? "" : formatMoney(String(v)),
-                                label: "Total billed",
-                              },
-                            ]
+                          ? hasStatusFilter
+                            ? monthlyAmountByStatusSeries
+                            : [
+                                {
+                                  data: monthValues,
+                                  color: CHART_PRIMARY,
+                                  area: true,
+                                  showMark: !isSm,
+                                  curve: "monotoneX",
+                                  valueFormatter: (v) =>
+                                    v == null ? "" : formatMoney(String(v)),
+                                  label: "Total billed",
+                                },
+                              ]
                           : perVendorSeries
                       }
                       margin={{ left: 64, right: 24, top: 16, bottom: 32 }}
                       grid={{ horizontal: true }}
-                      hideLegend={monthlyView === "total"}
+                      hideLegend={monthlyView === "total" && !hasStatusFilter}
                       slotProps={{
                         legend: {
                           direction: "horizontal",
@@ -716,18 +848,29 @@ export function Dashboard() {
                           valueFormatter: (v: number) => String(Math.round(v)),
                         },
                       ]}
-                      series={[
-                        {
-                          data: monthCounts,
-                          color: CHART_PRIMARY,
-                          label: "Bills",
-                          valueFormatter: (v) => (v == null ? "" : String(v)),
-                        },
-                      ]}
+                      series={
+                        hasStatusFilter
+                          ? monthlyCountByStatusSeries
+                          : [
+                              {
+                                data: monthCounts,
+                                color: CHART_PRIMARY,
+                                label: "Bills",
+                                valueFormatter: (v) => (v == null ? "" : String(v)),
+                              },
+                            ]
+                      }
                       borderRadius={4}
-                      margin={{ left: 48, right: 24, top: 16, bottom: 32 }}
+                      margin={{ left: 48, right: 24, top: 16, bottom: hasStatusFilter ? 56 : 32 }}
                       grid={{ horizontal: true }}
-                      hideLegend
+                      hideLegend={!hasStatusFilter}
+                      slotProps={{
+                        legend: {
+                          direction: "horizontal",
+                          position: { vertical: "bottom", horizontal: "center" },
+                          sx: { fontSize: 11 },
+                        },
+                      }}
                       onItemClick={(_, item) => {
                         const m = monthly[item.dataIndex]?.month;
                         if (!m) return;
