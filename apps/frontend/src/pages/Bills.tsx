@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Box,
   Button,
@@ -49,6 +50,7 @@ const STATUS_LABELS: Record<BillStatus, string> = {
 
 export function Bills() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const isAdmin = user?.role === "admin";
   const [page, setPage] = useState(0); // TablePagination is 0-based
   const [pageSize, setPageSize] = useState(10);
@@ -218,7 +220,12 @@ export function Bills() {
               {data.items.map((bill) => {
                 const overdue = isOverdue(bill.dueDate, bill.status);
                 return (
-                  <TableRow key={bill.id} hover>
+                  <TableRow
+                    key={bill.id}
+                    hover
+                    onClick={() => navigate(`/bills/${bill.id}`)}
+                    sx={{ cursor: "pointer" }}
+                  >
                     <TableCell>
                       <Typography variant="body2" sx={{ fontWeight: 500 }}>
                         {bill.vendorName}
@@ -262,7 +269,7 @@ export function Bills() {
                         </Typography>
                       )}
                     </TableCell>
-                    <TableCell align="right">
+                    <TableCell align="right" onClick={(e) => e.stopPropagation()}>
                       <Stack direction="row" spacing={0.5} sx={{ justifyContent: "flex-end" }}>
                         {isAdmin && bill.status === "draft" && (
                           <Tooltip title="Submit for approval">

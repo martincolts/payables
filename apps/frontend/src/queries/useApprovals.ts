@@ -35,6 +35,7 @@ export function useSubmitApproval(billId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["approvals", billId] });
       queryClient.invalidateQueries({ queryKey: ["bills"] });
+      queryClient.invalidateQueries({ queryKey: ["bill", billId] });
     },
   });
 }
@@ -48,6 +49,9 @@ export function useSubmitBill() {
       if (!res.ok) throw new Error(await errorMessage(res, "Couldn't submit bill"));
       return res.json();
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["bills"] }),
+    onSuccess: (_, billId) => {
+      queryClient.invalidateQueries({ queryKey: ["bills"] });
+      queryClient.invalidateQueries({ queryKey: ["bill", billId] });
+    },
   });
 }

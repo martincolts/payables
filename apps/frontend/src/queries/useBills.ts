@@ -50,6 +50,18 @@ export function useBills(query: BillsQuery = {}) {
   });
 }
 
+export function useBill(id: string | undefined) {
+  return useQuery({
+    queryKey: ["bill", id],
+    enabled: !!id,
+    queryFn: async () => {
+      const res = await api.api.bills[":id"].$get({ param: { id: id! } });
+      if (!res.ok) throw new Error("Couldn't load bill");
+      return res.json();
+    },
+  });
+}
+
 /** Reads `{ error }` from a failed response, falling back to a default message. */
 async function errorMessage(res: Response, fallback: string): Promise<string> {
   const body = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -74,7 +86,11 @@ export function useDeleteBill() {
     mutationFn: async (id: string) => {
       const res = await api.api.bills[":id"].$delete({ param: { id } });
       if (!res.ok) throw new Error(await errorMessage(res, "Couldn't delete bill"));
+      return id;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["bills"] }),
+    onSuccess: (id) => {
+      queryClient.invalidateQueries({ queryKey: ["bills"] });
+      queryClient.invalidateQueries({ queryKey: ["bill", id] });
+    },
   });
 }

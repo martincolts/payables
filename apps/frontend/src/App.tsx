@@ -4,6 +4,7 @@ import { ProtectedRoute } from "./auth/ProtectedRoute";
 import { Dashboard } from "./pages/Dashboard";
 import { Vendors } from "./pages/Vendors";
 import { Bills } from "./pages/Bills";
+import { BillDetail } from "./pages/BillDetail";
 import { Team } from "./pages/Team";
 import { Settings } from "./pages/Settings";
 import { ActivityLog } from "./pages/ActivityLog";
@@ -26,6 +27,7 @@ export function App() {
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/bills" element={<Bills />} />
+                <Route path="/bills/:id" element={<BillDetail />} />
                 <Route path="/vendors" element={<Vendors />} />
                 <Route
                   path="/team"
