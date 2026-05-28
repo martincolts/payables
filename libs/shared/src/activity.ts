@@ -12,6 +12,8 @@ export const activityActions = [
   "bill_approved",
   "bill_rejected",
   "bill_deleted",
+  "bill_paid",
+  "bill_payment_failed",
   "vendor_created",
   "vendor_deactivated",
 ] as const;

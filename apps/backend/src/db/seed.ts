@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { loadConfig } from "../config.js";
 import { createDb } from "./client.js";
-import { bills, organizations, users, vendors } from "./schema/index.js";
+import { approvals, bills, organizations, users, vendors } from "./schema/index.js";
 import { hashPassword } from "../lib/password.js";
 
 /**
@@ -89,8 +89,12 @@ async function seed() {
     .where(and(eq(users.organizationId, orgId), eq(users.role, "admin")))
     .limit(1);
   const vendorRows = await db.select().from(vendors).where(eq(vendors.organizationId, orgId));
-  if (!admin || vendorRows.length === 0) {
-    console.warn("Skipping bill seed: missing admin user or vendors.");
+  const approverRows = await db
+    .select()
+    .from(users)
+    .where(and(eq(users.organizationId, orgId), eq(users.role, "approver")));
+  if (!admin || vendorRows.length === 0 || approverRows.length < 2) {
+    console.warn("Skipping bill seed: missing admin user, vendors, or approvers.");
     await pool.end();
     return;
   }
@@ -281,9 +285,41 @@ async function seed() {
     }
   }
 
-  await db.insert(bills).values(billValues);
+  const insertedBills = await db.insert(bills).values(billValues).returning({ id: bills.id, status: bills.status, issueDate: bills.issueDate });
 
-  console.log(`Seed complete: inserted ${billValues.length} bills across 24 months.`);
+  // Paid bills must have gone through the 2-approver quorum — backfill matching
+  // approval rows so the audit trail is consistent with the bill's status.
+  const approvalValues: (typeof approvals.$inferInsert)[] = [];
+  for (const bill of insertedBills) {
+    const resolvedAt = new Date(`${bill.issueDate}T12:00:00Z`);
+    const offset = Math.floor(rand() * approverRows.length);
+    if (bill.status === "paid" || bill.status === "approved" || bill.status === "scheduled") {
+      // Reached quorum — record 2 distinct approvers signing off.
+      const first = approverRows[offset % approverRows.length]!;
+      const second = approverRows[(offset + 1) % approverRows.length]!;
+      approvalValues.push(
+        { billId: bill.id, approverId: first.id, status: "approved", resolvedAt },
+        { billId: bill.id, approverId: second.id, status: "approved", resolvedAt },
+      );
+    } else if (bill.status === "rejected") {
+      // A single rejection is enough to block the bill — record who rejected it.
+      const rejecter = approverRows[offset % approverRows.length]!;
+      approvalValues.push({
+        billId: bill.id,
+        approverId: rejecter.id,
+        status: "rejected",
+        comment: "Rejected — please review and resubmit.",
+        resolvedAt,
+      });
+    }
+  }
+  if (approvalValues.length > 0) {
+    await db.insert(approvals).values(approvalValues);
+  }
+
+  console.log(
+    `Seed complete: inserted ${billValues.length} bills and ${approvalValues.length} approvals across 24 months.`,
+  );
   await pool.end();
 }
 

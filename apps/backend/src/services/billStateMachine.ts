@@ -11,10 +11,11 @@ import { InvalidTransitionError } from "../types/errors.js";
 const TRANSITIONS: Record<BillStatus, readonly BillStatus[]> = {
   draft: ["pending_approval"],
   pending_approval: ["approved", "rejected"],
-  approved: ["scheduled"],
+  approved: ["scheduled", "paid", "payment_failed"],
   rejected: ["draft"],
-  scheduled: ["paid"],
+  scheduled: ["paid", "payment_failed"],
   paid: [],
+  payment_failed: ["paid", "approved"],
 };
 
 export function canTransition(from: BillStatus, to: BillStatus): boolean {

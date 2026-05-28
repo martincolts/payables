@@ -55,6 +55,7 @@ const STATUS_LABELS: Record<BillStatus, string> = {
   rejected: "Rejected",
   scheduled: "Scheduled",
   paid: "Paid",
+  payment_failed: "Payment failed",
 };
 
 function statusColor(theme: Theme, status: BillStatus): string {
@@ -71,6 +72,8 @@ function statusColor(theme: Theme, status: BillStatus): string {
       return theme.palette.secondary.main;
     case "paid":
       return theme.palette.success.main;
+    case "payment_failed":
+      return theme.palette.error.main;
   }
 }
 

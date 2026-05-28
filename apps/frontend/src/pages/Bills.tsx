@@ -27,9 +27,16 @@ import AddIcon from "@mui/icons-material/Add";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
 import SendIcon from "@mui/icons-material/Send";
 import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
+import PaymentsOutlinedIcon from "@mui/icons-material/PaymentsOutlined";
+import ErrorOutlineIcon from "@mui/icons-material/ErrorOutlineOutlined";
 import { toast } from "react-toastify";
 import { billStatuses, type BillListItem, type BillStatus } from "@payables/shared";
-import { useBills, useDeleteBill } from "../queries/useBills";
+import {
+  useBills,
+  useDeleteBill,
+  useSimulatePayment,
+  useSimulatePaymentFailure,
+} from "../queries/useBills";
 import { useVendors } from "../queries/useVendors";
 import { useSubmitBill } from "../queries/useApprovals";
 import { useAuth } from "../auth/AuthContext";
@@ -46,6 +53,7 @@ const STATUS_LABELS: Record<BillStatus, string> = {
   rejected: "Rejected",
   scheduled: "Scheduled",
   paid: "Paid",
+  payment_failed: "Payment failed",
 };
 
 export function Bills() {
@@ -65,6 +73,8 @@ export function Bills() {
   const [reviewing, setReviewing] = useState<BillListItem | null>(null);
   const deleteBill = useDeleteBill();
   const submitBill = useSubmitBill();
+  const simulatePayment = useSimulatePayment();
+  const simulateFailure = useSimulatePaymentFailure();
 
   async function handleSubmit(bill: BillListItem) {
     try {
@@ -74,6 +84,27 @@ export function Bills() {
       toast.error(err instanceof Error ? err.message : "Couldn't submit bill");
     }
   }
+
+  async function handleSimulatePay(bill: BillListItem) {
+    try {
+      await simulatePayment.mutateAsync(bill.id);
+      toast.success("Payment simulated — bill marked as paid (demo)");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't simulate payment");
+    }
+  }
+
+  async function handleSimulateFail(bill: BillListItem) {
+    try {
+      await simulateFailure.mutateAsync(bill.id);
+      toast.success("Payment failure simulated (demo)");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't simulate failure");
+    }
+  }
+
+  const canSimulatePayment = (s: BillStatus) =>
+    s === "approved" || s === "scheduled" || s === "payment_failed";
 
   const { data, isLoading, isError } = useBills({
     page: page + 1,
@@ -293,6 +324,32 @@ export function Bills() {
                               <FactCheckOutlinedIcon fontSize="small" />
                             </IconButton>
                           </Tooltip>
+                        )}
+                        {isAdmin && canSimulatePayment(bill.status) && (
+                          <>
+                            <Tooltip title="Simulate successful payment (demo only)">
+                              <IconButton
+                                aria-label={`Simulate payment for bill ${bill.invoiceNumber ?? bill.id} (demo)`}
+                                size="small"
+                                color="success"
+                                disabled={simulatePayment.isPending}
+                                onClick={() => handleSimulatePay(bill)}
+                              >
+                                <PaymentsOutlinedIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Simulate failed payment (demo only)">
+                              <IconButton
+                                aria-label={`Simulate payment failure for bill ${bill.invoiceNumber ?? bill.id} (demo)`}
+                                size="small"
+                                color="error"
+                                disabled={simulateFailure.isPending}
+                                onClick={() => handleSimulateFail(bill)}
+                              >
+                                <ErrorOutlineIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </>
                         )}
                         {isAdmin && bill.status === "draft" && (
                           <Tooltip title="Delete draft bill">

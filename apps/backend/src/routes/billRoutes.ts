@@ -42,6 +42,24 @@ export function createBillRoutes(
       );
       return c.json(bill);
     })
+    .post("/:id/simulate-payment", requireAdmin, async (c) => {
+      const user = c.get("user");
+      const bill = await service.simulatePayment(
+        c.req.param("id"),
+        user.organizationId,
+        user.id,
+      );
+      return c.json(bill);
+    })
+    .post("/:id/simulate-payment-failure", requireAdmin, async (c) => {
+      const user = c.get("user");
+      const bill = await service.simulatePaymentFailure(
+        c.req.param("id"),
+        user.organizationId,
+        user.id,
+      );
+      return c.json(bill);
+    })
     .get("/:id/approvals", async (c) => {
       const summary = await approvalService.getSummary(
         c.req.param("id"),

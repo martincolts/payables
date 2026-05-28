@@ -22,9 +22,16 @@ import {
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
 import SendIcon from "@mui/icons-material/Send";
+import PaymentsOutlinedIcon from "@mui/icons-material/PaymentsOutlined";
+import ErrorOutlineIcon from "@mui/icons-material/ErrorOutlineOutlined";
 import { toast } from "react-toastify";
 import { useAuth } from "../auth/AuthContext";
-import { useBill, useDeleteBill } from "../queries/useBills";
+import {
+  useBill,
+  useDeleteBill,
+  useSimulatePayment,
+  useSimulatePaymentFailure,
+} from "../queries/useBills";
 import { useApprovals, useSubmitApproval, useSubmitBill } from "../queries/useApprovals";
 import { StatusChip } from "../components/StatusChip";
 import { ConfirmDialog } from "../components/ConfirmDialog";
@@ -42,6 +49,8 @@ export function BillDetail() {
   const submitBill = useSubmitBill();
   const submitApproval = useSubmitApproval(id ?? "");
   const deleteBill = useDeleteBill();
+  const simulatePayment = useSimulatePayment();
+  const simulateFailure = useSimulatePaymentFailure();
 
   const [comment, setComment] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -73,6 +82,9 @@ export function BillDetail() {
   const b = bill.data;
   const overdue = isOverdue(b.dueDate, b.status);
   const canVote = canRecordDecision && b.status === "pending_approval";
+  const canSimulatePayment =
+    isAdmin &&
+    (b.status === "approved" || b.status === "scheduled" || b.status === "payment_failed");
   const progress = approvals.data
     ? Math.min(100, (approvals.data.approved / approvals.data.required) * 100)
     : 0;
@@ -97,6 +109,24 @@ export function BillDetail() {
       setComment("");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't record decision");
+    }
+  }
+
+  async function handleSimulatePay() {
+    try {
+      await simulatePayment.mutateAsync(b.id);
+      toast.success("Payment simulated — bill marked as paid (demo)");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't simulate payment");
+    }
+  }
+
+  async function handleSimulateFail() {
+    try {
+      await simulateFailure.mutateAsync(b.id);
+      toast.success("Payment failure simulated (demo)");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't simulate failure");
     }
   }
 
@@ -160,8 +190,39 @@ export function BillDetail() {
               </Button>
             </>
           )}
+          {canSimulatePayment && (
+            <>
+              <Button
+                variant="contained"
+                color="success"
+                size="small"
+                startIcon={<PaymentsOutlinedIcon />}
+                disabled={simulatePayment.isPending}
+                onClick={handleSimulatePay}
+              >
+                Simulate payment (demo)
+              </Button>
+              <Button
+                variant="outlined"
+                color="error"
+                size="small"
+                startIcon={<ErrorOutlineIcon />}
+                disabled={simulateFailure.isPending}
+                onClick={handleSimulateFail}
+              >
+                Simulate failure (demo)
+              </Button>
+            </>
+          )}
         </Stack>
       </Stack>
+      {canSimulatePayment && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Payment actions below are for demo purposes only — no real funds are
+          moved. They just flip the bill's status so the lifecycle can be
+          exercised end-to-end.
+        </Alert>
+      )}
 
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 7 }}>

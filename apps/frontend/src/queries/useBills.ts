@@ -80,6 +80,43 @@ export function useCreateBill() {
   });
 }
 
+/** Demo-only: marks a bill as paid (no real payment is processed). */
+export function useSimulatePayment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await api.api.bills[":id"]["simulate-payment"].$post({
+        param: { id },
+      });
+      if (!res.ok) throw new Error(await errorMessage(res, "Couldn't simulate payment"));
+      return res.json();
+    },
+    onSuccess: (bill) => {
+      queryClient.invalidateQueries({ queryKey: ["bills"] });
+      queryClient.invalidateQueries({ queryKey: ["bill", bill.id] });
+    },
+  });
+}
+
+/** Demo-only: marks a bill as payment_failed. */
+export function useSimulatePaymentFailure() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await api.api.bills[":id"]["simulate-payment-failure"].$post({
+        param: { id },
+      });
+      if (!res.ok)
+        throw new Error(await errorMessage(res, "Couldn't simulate payment failure"));
+      return res.json();
+    },
+    onSuccess: (bill) => {
+      queryClient.invalidateQueries({ queryKey: ["bills"] });
+      queryClient.invalidateQueries({ queryKey: ["bill", bill.id] });
+    },
+  });
+}
+
 export function useDeleteBill() {
   const queryClient = useQueryClient();
   return useMutation({

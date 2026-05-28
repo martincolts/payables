@@ -9,6 +9,7 @@ const STATUS_META: Record<BillStatus, { label: string; color: ChipProps["color"]
   rejected: { label: "Rejected", color: "error" },
   scheduled: { label: "Scheduled", color: "primary" },
   paid: { label: "Paid", color: "success" },
+  payment_failed: { label: "Payment failed", color: "error" },
 };
 
 export function StatusChip({ status }: { status: BillStatus }) {

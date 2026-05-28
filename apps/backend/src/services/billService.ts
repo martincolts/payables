@@ -91,6 +91,57 @@ export function createBillService(db: DB) {
       });
     },
 
+    /**
+     * Demo-only: marks an approved/scheduled bill as paid. Real payment rails
+     * are out of scope for this take-home; this just flips the status and logs.
+     */
+    async simulatePayment(
+      id: string,
+      organizationId: string,
+      userId: string,
+    ): Promise<BillListItem> {
+      const bill = await repo.getById(id, organizationId);
+      assertTransition(bill.status, "paid");
+      return db.transaction(async (tx) => {
+        const updated = await createBillRepo(tx).updateStatus(id, organizationId, "paid");
+        await createActivityLogRepo(tx).log({
+          organizationId,
+          userId,
+          action: "bill_paid",
+          entityType: "bill",
+          entityId: id,
+          metadata: { simulated: true },
+        });
+        return updated;
+      });
+    },
+
+    /** Demo-only: marks the bill as payment_failed. */
+    async simulatePaymentFailure(
+      id: string,
+      organizationId: string,
+      userId: string,
+    ): Promise<BillListItem> {
+      const bill = await repo.getById(id, organizationId);
+      assertTransition(bill.status, "payment_failed");
+      return db.transaction(async (tx) => {
+        const updated = await createBillRepo(tx).updateStatus(
+          id,
+          organizationId,
+          "payment_failed",
+        );
+        await createActivityLogRepo(tx).log({
+          organizationId,
+          userId,
+          action: "bill_payment_failed",
+          entityType: "bill",
+          entityId: id,
+          metadata: { simulated: true },
+        });
+        return updated;
+      });
+    },
+
     /** Deletes a bill. Only draft bills may be deleted. */
     async remove(id: string, organizationId: string, userId: string): Promise<void> {
       const bill = await repo.getById(id, organizationId); // throws NotFoundError if unknown

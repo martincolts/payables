@@ -29,6 +29,8 @@ const ACTION_LABELS: Record<ActivityAction, string> = {
   bill_approved: "Bill approved",
   bill_rejected: "Bill rejected",
   bill_deleted: "Bill deleted",
+  bill_paid: "Bill paid (demo)",
+  bill_payment_failed: "Bill payment failed (demo)",
   vendor_created: "Vendor created",
   vendor_deactivated: "Vendor deactivated",
 };
@@ -39,6 +41,8 @@ const ACTION_COLORS: Record<ActivityAction, "default" | "info" | "success" | "wa
   bill_approved: "success",
   bill_rejected: "error",
   bill_deleted: "warning",
+  bill_paid: "success",
+  bill_payment_failed: "error",
   vendor_created: "info",
   vendor_deactivated: "warning",
 };

@@ -8,6 +8,7 @@ export const billStatuses = [
   "rejected",
   "scheduled",
   "paid",
+  "payment_failed",
 ] as const;
 export const billStatusSchema = z.enum(billStatuses);
 export type BillStatus = z.infer<typeof billStatusSchema>;
