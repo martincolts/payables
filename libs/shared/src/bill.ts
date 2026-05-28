@@ -64,6 +64,8 @@ export const listBillsQuerySchema = z.object({
   vendorId: z.uuid().optional(),
   dueBefore: isoDate.optional(),
   dueAfter: isoDate.optional(),
+  issueBefore: isoDate.optional(),
+  issueAfter: isoDate.optional(),
   search: z.string().optional(),
   overdue: z
     .union([z.boolean(), z.literal("true"), z.literal("false")])

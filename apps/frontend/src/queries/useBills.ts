@@ -15,11 +15,13 @@ export interface BillsQuery {
   vendorId?: string;
   dueAfter?: string;
   dueBefore?: string;
+  issueAfter?: string;
+  issueBefore?: string;
   overdue?: boolean;
 }
 
 export function useBills(query: BillsQuery = {}) {
-  const { page = 1, pageSize = 20, status, search, vendorId, dueAfter, dueBefore, overdue } = query;
+  const { page = 1, pageSize = 20, status, search, vendorId, dueAfter, dueBefore, issueAfter, issueBefore, overdue } = query;
 
   return useQuery({
     queryKey: [
@@ -31,6 +33,8 @@ export function useBills(query: BillsQuery = {}) {
       vendorId ?? null,
       dueAfter ?? null,
       dueBefore ?? null,
+      issueAfter ?? null,
+      issueBefore ?? null,
       overdue ?? null,
     ],
     placeholderData: keepPreviousData,
@@ -44,6 +48,8 @@ export function useBills(query: BillsQuery = {}) {
           ...(vendorId ? { vendorId } : {}),
           ...(dueAfter ? { dueAfter } : {}),
           ...(dueBefore ? { dueBefore } : {}),
+          ...(issueAfter ? { issueAfter } : {}),
+          ...(issueBefore ? { issueBefore } : {}),
           ...(overdue ? { overdue: "true" } : {}),
         },
       });

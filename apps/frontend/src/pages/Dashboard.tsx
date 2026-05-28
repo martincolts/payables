@@ -74,12 +74,12 @@ function MetricCard({
   );
 }
 
-function windowToDateRange(w: StatsWindow): { dueAfter: string; dueBefore: string } {
+function windowToDateRange(w: StatsWindow): { issueAfter: string; issueBefore: string } {
   const [ty, tm] = w.to.split("-").map(Number);
-  const dueAfter = `${w.from}-01`;
+  const issueAfter = `${w.from}-01`;
   const lastDay = new Date(ty!, tm!, 0).getDate();
-  const dueBefore = `${w.to}-${String(lastDay).padStart(2, "0")}`;
-  return { dueAfter, dueBefore };
+  const issueBefore = `${w.to}-${String(lastDay).padStart(2, "0")}`;
+  return { issueAfter, issueBefore };
 }
 
 function billsHref(params: Record<string, string | undefined>): string {
@@ -735,8 +735,8 @@ export function Dashboard() {
                         const lastDay = new Date(my!, mm!, 0).getDate();
                         navigate(
                           billsHref({
-                            dueAfter: `${m}-01`,
-                            dueBefore: `${m}-${String(lastDay).padStart(2, "0")}`,
+                            issueAfter: `${m}-01`,
+                            issueBefore: `${m}-${String(lastDay).padStart(2, "0")}`,
                           }),
                         );
                       }}

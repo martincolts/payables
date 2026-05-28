@@ -66,6 +66,8 @@ type ParamKey =
   | "vendorId"
   | "dueAfter"
   | "dueBefore"
+  | "issueAfter"
+  | "issueBefore"
   | "overdue";
 
 function isBillStatus(v: string): v is BillStatus {
@@ -88,6 +90,8 @@ export function Bills() {
   const vendorId = searchParams.get("vendorId") ?? "";
   const dueAfter = searchParams.get("dueAfter") ?? "";
   const dueBefore = searchParams.get("dueBefore") ?? "";
+  const issueAfter = searchParams.get("issueAfter") ?? "";
+  const issueBefore = searchParams.get("issueBefore") ?? "";
   const overdue = searchParams.get("overdue") === "true";
 
   function updateParams(patch: Partial<Record<ParamKey, string>>, opts: { resetPage?: boolean } = {}) {
@@ -147,6 +151,8 @@ export function Bills() {
     vendorId: vendorId || undefined,
     dueAfter: dueAfter || undefined,
     dueBefore: dueBefore || undefined,
+    issueAfter: issueAfter || undefined,
+    issueBefore: issueBefore || undefined,
     overdue: overdue || undefined,
   });
 
@@ -247,6 +253,24 @@ export function Bills() {
           size="small"
           value={dueBefore}
           onChange={(e) => updateParams({ dueBefore: e.target.value }, { resetPage: true })}
+          slotProps={{ inputLabel: { shrink: true } }}
+          sx={{ minWidth: 150, flexGrow: { xs: 1, sm: 0 } }}
+        />
+        <TextField
+          label="Issued from"
+          type="date"
+          size="small"
+          value={issueAfter}
+          onChange={(e) => updateParams({ issueAfter: e.target.value }, { resetPage: true })}
+          slotProps={{ inputLabel: { shrink: true } }}
+          sx={{ minWidth: 150, flexGrow: { xs: 1, sm: 0 } }}
+        />
+        <TextField
+          label="Issued to"
+          type="date"
+          size="small"
+          value={issueBefore}
+          onChange={(e) => updateParams({ issueBefore: e.target.value }, { resetPage: true })}
           slotProps={{ inputLabel: { shrink: true } }}
           sx={{ minWidth: 150, flexGrow: { xs: 1, sm: 0 } }}
         />
