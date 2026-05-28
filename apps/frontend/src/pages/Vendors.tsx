@@ -85,7 +85,7 @@ export function Vendors() {
             <TableHead>
               <TableRow>
                 <TableCell>Name</TableCell>
-                <TableCell>Email</TableCell>
+                <TableCell sx={{ display: { xs: "none", sm: "table-cell" } }}>Email</TableCell>
                 <TableCell>Payment method</TableCell>
                 {isAdmin && <TableCell align="right">Actions</TableCell>}
               </TableRow>
@@ -97,8 +97,15 @@ export function Vendors() {
                     <Typography variant="body2" sx={{ fontWeight: 500 }}>
                       {v.name}
                     </Typography>
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ display: { xs: "block", sm: "none" } }}
+                    >
+                      {v.email}
+                    </Typography>
                   </TableCell>
-                  <TableCell>{v.email}</TableCell>
+                  <TableCell sx={{ display: { xs: "none", sm: "table-cell" } }}>{v.email}</TableCell>
                   <TableCell>
                     <Chip
                       label={PAYMENT_METHOD_LABELS[v.paymentMethod]}

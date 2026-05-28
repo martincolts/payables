@@ -63,7 +63,7 @@ export function Team() {
             <TableHead>
               <TableRow>
                 <TableCell>Name</TableCell>
-                <TableCell>Email</TableCell>
+                <TableCell sx={{ display: { xs: "none", sm: "table-cell" } }}>Email</TableCell>
                 <TableCell>Role</TableCell>
                 <TableCell>Status</TableCell>
               </TableRow>
@@ -71,8 +71,17 @@ export function Team() {
             <TableBody>
               {members.data.items.map((m) => (
                 <TableRow key={m.id} hover>
-                  <TableCell>{m.name}</TableCell>
-                  <TableCell>{m.email}</TableCell>
+                  <TableCell>
+                    {m.name}
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ display: { xs: "block", sm: "none" } }}
+                    >
+                      {m.email}
+                    </Typography>
+                  </TableCell>
+                  <TableCell sx={{ display: { xs: "none", sm: "table-cell" } }}>{m.email}</TableCell>
                   <TableCell sx={{ textTransform: "capitalize" }}>{m.role}</TableCell>
                   <TableCell>
                     <Chip

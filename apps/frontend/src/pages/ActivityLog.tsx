@@ -108,8 +108,13 @@ export function ActivityLog() {
         </Typography>
       </Stack>
 
-      <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ mb: 2 }}>
-        <FormControl size="small" sx={{ minWidth: 220 }}>
+      <Stack
+        direction={{ xs: "column", sm: "row" }}
+        spacing={2}
+        useFlexGap
+        sx={{ mb: 2, flexWrap: "wrap" }}
+      >
+        <FormControl size="small" sx={{ minWidth: { xs: "100%", sm: 200 }, flexGrow: 1 }}>
           <InputLabel id="user-filter-label">User</InputLabel>
           <Select
             labelId="user-filter-label"
@@ -129,7 +134,7 @@ export function ActivityLog() {
           </Select>
         </FormControl>
 
-        <FormControl size="small" sx={{ minWidth: 220 }}>
+        <FormControl size="small" sx={{ minWidth: { xs: "100%", sm: 200 }, flexGrow: 1 }}>
           <InputLabel id="action-filter-label">Action</InputLabel>
           <Select
             labelId="action-filter-label"
@@ -159,7 +164,7 @@ export function ActivityLog() {
             setPage(0);
           }}
           slotProps={{ inputLabel: { shrink: true } }}
-          sx={{ minWidth: 160 }}
+          sx={{ minWidth: 150, flexGrow: { xs: 1, sm: 0 } }}
         />
         <TextField
           label="To"
@@ -171,7 +176,7 @@ export function ActivityLog() {
             setPage(0);
           }}
           slotProps={{ inputLabel: { shrink: true } }}
-          sx={{ minWidth: 160 }}
+          sx={{ minWidth: 150, flexGrow: { xs: 1, sm: 0 } }}
         />
       </Stack>
 
@@ -185,9 +190,9 @@ export function ActivityLog() {
             <TableHead>
               <TableRow>
                 <TableCell>When</TableCell>
-                <TableCell>User</TableCell>
+                <TableCell sx={{ display: { xs: "none", sm: "table-cell" } }}>User</TableCell>
                 <TableCell>Action</TableCell>
-                <TableCell>Details</TableCell>
+                <TableCell sx={{ display: { xs: "none", md: "table-cell" } }}>Details</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -197,8 +202,17 @@ export function ActivityLog() {
                     <Typography variant="body2">
                       {formatTimestamp(entry.createdAt)}
                     </Typography>
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ display: { xs: "block", sm: "none" } }}
+                    >
+                      {entry.userName}
+                    </Typography>
                   </TableCell>
-                  <TableCell>{entry.userName}</TableCell>
+                  <TableCell sx={{ display: { xs: "none", sm: "table-cell" } }}>
+                    {entry.userName}
+                  </TableCell>
                   <TableCell>
                     <Chip
                       label={ACTION_LABELS[entry.action]}
@@ -206,8 +220,29 @@ export function ActivityLog() {
                       color={ACTION_COLORS[entry.action]}
                       variant="outlined"
                     />
+                    <Box sx={{ display: { xs: "block", md: "none" }, mt: 0.5 }}>
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        sx={{ alignItems: "center", flexWrap: "wrap" }}
+                        useFlexGap
+                      >
+                        <Typography variant="caption" color="text.secondary">
+                          {metadataSummary(entry.metadata)}
+                        </Typography>
+                        {entry.entityType === "bill" && entry.action !== "bill_deleted" && (
+                          <MuiLink
+                            component={RouterLink}
+                            to={`/bills/${entry.entityId}`}
+                            variant="caption"
+                          >
+                            View bill
+                          </MuiLink>
+                        )}
+                      </Stack>
+                    </Box>
                   </TableCell>
-                  <TableCell>
+                  <TableCell sx={{ display: { xs: "none", md: "table-cell" } }}>
                     <Stack
                       direction="row"
                       spacing={1}
@@ -244,6 +279,12 @@ export function ActivityLog() {
             rowsPerPageOptions={[10, 20, 50]}
             labelRowsPerPage="Rows per page"
             labelDisplayedRows={({ from, to, count }) => `${from}–${to} of ${count}`}
+            sx={{
+              "& .MuiTablePagination-toolbar": { flexWrap: "wrap", rowGap: 1 },
+              "& .MuiTablePagination-selectLabel, & .MuiTablePagination-input": {
+                display: { xs: "none", sm: "inline-flex" },
+              },
+            }}
           />
         </TableContainer>
       ) : (

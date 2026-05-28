@@ -169,7 +169,8 @@ export function Bills() {
     <Box>
       <Stack
         direction="row"
-        sx={{ mb: 2, justifyContent: "space-between", alignItems: "center" }}
+        spacing={1}
+        sx={{ mb: 2, justifyContent: "space-between", alignItems: "center", flexWrap: "wrap" }}
       >
         <Typography variant="h5" component="h1">
           Bills
@@ -179,6 +180,7 @@ export function Bills() {
             variant="contained"
             startIcon={<AddIcon />}
             onClick={() => setFormOpen(true)}
+            size="small"
           >
             New bill
           </Button>
@@ -188,6 +190,7 @@ export function Bills() {
       <Stack
         direction={{ xs: "column", sm: "row" }}
         spacing={2}
+        useFlexGap
         sx={{ mb: 2, flexWrap: "wrap" }}
       >
         <TextField
@@ -195,9 +198,9 @@ export function Bills() {
           value={search}
           onChange={(e) => updateParams({ search: e.target.value }, { resetPage: true })}
           size="small"
-          sx={{ flexGrow: 1, minWidth: 220 }}
+          sx={{ flexGrow: 1, minWidth: { xs: "100%", sm: 220 } }}
         />
-        <FormControl size="small" sx={{ minWidth: 200 }} disabled={overdue}>
+        <FormControl size="small" sx={{ minWidth: { xs: "100%", sm: 180 } }} disabled={overdue}>
           <InputLabel id="status-filter-label">Status</InputLabel>
           <Select
             labelId="status-filter-label"
@@ -213,7 +216,7 @@ export function Bills() {
             ))}
           </Select>
         </FormControl>
-        <FormControl size="small" sx={{ minWidth: 200 }}>
+        <FormControl size="small" sx={{ minWidth: { xs: "100%", sm: 180 } }}>
           <InputLabel id="vendor-filter-label">Vendor</InputLabel>
           <Select
             labelId="vendor-filter-label"
@@ -236,7 +239,7 @@ export function Bills() {
           value={dueAfter}
           onChange={(e) => updateParams({ dueAfter: e.target.value }, { resetPage: true })}
           slotProps={{ inputLabel: { shrink: true } }}
-          sx={{ minWidth: 160 }}
+          sx={{ minWidth: 150, flexGrow: { xs: 1, sm: 0 } }}
         />
         <TextField
           label="Due to"
@@ -245,7 +248,7 @@ export function Bills() {
           value={dueBefore}
           onChange={(e) => updateParams({ dueBefore: e.target.value }, { resetPage: true })}
           slotProps={{ inputLabel: { shrink: true } }}
-          sx={{ minWidth: 160 }}
+          sx={{ minWidth: 150, flexGrow: { xs: 1, sm: 0 } }}
         />
         <FormControlLabel
           control={
@@ -275,8 +278,8 @@ export function Bills() {
                 <TableCell>Vendor</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell align="right">Amount</TableCell>
-                <TableCell>Due date</TableCell>
-                <TableCell>Approvals</TableCell>
+                <TableCell sx={{ display: { xs: "none", sm: "table-cell" } }}>Due date</TableCell>
+                <TableCell sx={{ display: { xs: "none", md: "table-cell" } }}>Approvals</TableCell>
                 <TableCell align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
@@ -295,16 +298,24 @@ export function Bills() {
                         {bill.vendorName}
                       </Typography>
                       {bill.invoiceNumber && (
-                        <Typography variant="caption" color="text.secondary">
+                        <Typography variant="caption" color="text.secondary" component="div">
                           {bill.invoiceNumber}
                         </Typography>
                       )}
+                      <Typography
+                        variant="caption"
+                        color={overdue ? "error.main" : "text.secondary"}
+                        sx={{ display: { xs: "block", sm: "none" }, fontWeight: overdue ? 600 : 400 }}
+                      >
+                        Due {formatDate(bill.dueDate)}
+                        {overdue && " · Overdue"}
+                      </Typography>
                     </TableCell>
                     <TableCell>
                       <StatusChip status={bill.status} />
                     </TableCell>
                     <TableCell align="right">{formatMoney(bill.amount)}</TableCell>
-                    <TableCell>
+                    <TableCell sx={{ display: { xs: "none", sm: "table-cell" } }}>
                       <Typography
                         variant="body2"
                         color={overdue ? "error.main" : "text.primary"}
@@ -314,7 +325,7 @@ export function Bills() {
                         {overdue && " · Overdue"}
                       </Typography>
                     </TableCell>
-                    <TableCell>
+                    <TableCell sx={{ display: { xs: "none", md: "table-cell" } }}>
                       {bill.approvers.length > 0 ? (
                         <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", rowGap: 0.5 }}>
                           {bill.approvers.map((a, i) => (
@@ -417,6 +428,12 @@ export function Bills() {
             rowsPerPageOptions={[10, 20, 50]}
             labelRowsPerPage="Rows per page"
             labelDisplayedRows={({ from, to, count }) => `${from}–${to} of ${count}`}
+            sx={{
+              "& .MuiTablePagination-toolbar": { flexWrap: "wrap", rowGap: 1 },
+              "& .MuiTablePagination-selectLabel, & .MuiTablePagination-input": {
+                display: { xs: "none", sm: "inline-flex" },
+              },
+            }}
           />
         </TableContainer>
       ) : (
