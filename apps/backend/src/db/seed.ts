@@ -6,7 +6,7 @@ import { hashPassword } from "../lib/password.js";
 
 /**
  * Seeds demo data: an organization, a demo admin + a few approvers, vendors, and
- * a spread of bills across all statuses spanning the last 8 months (including
+ * a spread of bills across all statuses spanning the last 24 months (including
  * overdue ones) so the Bills table and Dashboard metrics are well populated. The
  * org requires 2 approvals so the quorum flow is exercisable.
  * Run with: pnpm nx run backend:seed
@@ -109,52 +109,181 @@ async function seed() {
   }
 
   const iso = (d: Date) => d.toISOString().slice(0, 10);
-  const daysFromNow = (n: number) => iso(new Date(Date.now() + n * 86_400_000));
+  const vendorByName = new Map(vendorRows.map((v) => [v.name, v.id] as const));
 
-  const vendorIds = vendorRows.map((v) => v.id);
-  const statuses = ["draft", "pending_approval", "approved", "rejected", "scheduled", "paid"] as const;
+  // Deterministic PRNG so reseeds produce identical data.
+  const mulberry32 = (seed: number) => {
+    let t = seed >>> 0;
+    return () => {
+      t = (t + 0x6d2b79f5) >>> 0;
+      let x = t;
+      x = Math.imul(x ^ (x >>> 15), x | 1);
+      x ^= x + Math.imul(x ^ (x >>> 7), x | 61);
+      return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+    };
+  };
+  const rand = mulberry32(42);
+  const jitter = (base: number, pct: number) => base * (1 + (rand() * 2 - 1) * pct);
 
-  // Generate ~5 bills per month for the last 8 months so the Bills table and
-  // Dashboard charts have meaningful history. Statuses skew with age: recent
-  // months stay in earlier lifecycle states, older months are mostly paid.
+  type Status = "draft" | "pending_approval" | "approved" | "rejected" | "scheduled" | "paid";
+
+  // Status by month-age. Recent months are still live; older months have settled.
+  // `monthsAgo === 0` is the current month — bills here are mid-lifecycle.
+  const pickStatus = (monthsAgo: number, dayOfMonth: number): Status => {
+    if (monthsAgo === 0) {
+      // Live month: spread across early lifecycle, skewed by how far into the month.
+      const r = rand();
+      if (dayOfMonth <= 5) return r < 0.5 ? "draft" : "pending_approval";
+      if (dayOfMonth <= 15) return r < 0.4 ? "pending_approval" : r < 0.8 ? "approved" : "scheduled";
+      return r < 0.4 ? "approved" : r < 0.85 ? "scheduled" : "paid";
+    }
+    if (monthsAgo === 1) {
+      const r = rand();
+      return r < 0.7 ? "paid" : r < 0.85 ? "scheduled" : r < 0.95 ? "approved" : "rejected";
+    }
+    // Older months: nearly all paid, an occasional rejected.
+    return rand() < 0.04 ? "rejected" : "paid";
+  };
+
+  // Per-vendor recurring-bill profile. Each profile encodes realistic patterns:
+  //   - amountFor(monthsAgo): price curve (flat with bumps, or usage-driven jitter)
+  //   - skip(monthsAgo): months where no invoice was issued (vendor not used / on hold)
+  //   - dayOfMonth: when the invoice typically lands
+  type Profile = {
+    vendorName: string;
+    dayOfMonth: number;
+    netDays: number;
+    amountFor: (monthsAgo: number) => number;
+    skip: (monthsAgo: number) => boolean;
+  };
+
+  const profiles: Profile[] = [
+    {
+      // AWS: usage-based, trending up as the product grows, with monthly noise.
+      vendorName: "Amazon Web Services",
+      dayOfMonth: 3,
+      netDays: 15,
+      amountFor: (m) => {
+        const baseline = 1800 - m * 35; // older months were cheaper
+        return Math.max(600, jitter(baseline, 0.18));
+      },
+      skip: () => false,
+    },
+    {
+      // Stripe: processing fees, scales with revenue. Mild upward trend, noisy.
+      vendorName: "Stripe",
+      dayOfMonth: 5,
+      netDays: 7,
+      amountFor: (m) => Math.max(150, jitter(520 - m * 9, 0.22)),
+      skip: () => false,
+    },
+    {
+      // Figma: seat-based SaaS. Two price tiers over 24 months (seat expansion).
+      vendorName: "Figma",
+      dayOfMonth: 10,
+      netDays: 30,
+      amountFor: (m) => {
+        if (m >= 14) return 180; // 14+ months ago: smaller team
+        if (m >= 5) return 225;  // mid-period: tier bump
+        return 270;              // recent: another seat bump
+      },
+      // Briefly cancelled for 2 months mid-period before re-subscribing.
+      skip: (m) => m === 12 || m === 13,
+    },
+    {
+      // WeWork: office rent. Flat for long stretches, two annual rent hikes.
+      // Skipped while moving offices.
+      vendorName: "WeWork",
+      dayOfMonth: 1,
+      netDays: 30,
+      amountFor: (m) => {
+        if (m >= 16) return 3200;
+        if (m >= 4) return 3500;
+        return 3850;
+      },
+      skip: (m) => m === 15, // 1-month gap during office move
+    },
+    {
+      // Notion: started using it 18 months ago, occasional flat months with bumps.
+      vendorName: "Notion",
+      dayOfMonth: 18,
+      netDays: 30,
+      amountFor: (m) => {
+        if (m >= 18) return 0; // not a customer yet
+        if (m >= 9) return 80;
+        if (m >= 3) return 96;
+        return 120;
+      },
+      skip: (m) => m >= 18,
+    },
+  ];
+
+  // Generate per-vendor monthly bills across the last 24 months.
+  const today = new Date();
   const billValues: (typeof bills.$inferInsert)[] = [];
-  for (let monthsAgo = 0; monthsAgo < 8; monthsAgo++) {
-    const billsThisMonth = 5;
-    for (let i = 0; i < billsThisMonth; i++) {
-      const vendorId = vendorIds[(monthsAgo * billsThisMonth + i) % vendorIds.length]!;
-      // Spread issue dates across the month, then derive a 30-day due date.
-      const issueOffset = -(monthsAgo * 30 + i * 5 + 2);
-      const dueOffset = issueOffset + 30;
+  let invoiceCounter = 1;
 
-      let status: (typeof statuses)[number];
-      if (monthsAgo >= 3) {
-        // Older bills are settled (paid) or were rejected.
-        status = i % 4 === 0 ? "rejected" : "paid";
-      } else if (monthsAgo === 0) {
-        // This month: a live mix across the early lifecycle.
-        status = statuses[i % statuses.length]!;
-      } else {
-        // Recent months: mostly approved/scheduled, some paid.
-        status = ["approved", "scheduled", "paid", "scheduled", "approved"][i]! as (typeof statuses)[number];
-      }
+  for (let monthsAgo = 23; monthsAgo >= 0; monthsAgo--) {
+    const issueBase = new Date(today.getFullYear(), today.getMonth() - monthsAgo, 1);
+    const year = issueBase.getFullYear();
 
-      const amount = (50 + ((monthsAgo * 137 + i * 311) % 9950)).toFixed(2);
+    for (const profile of profiles) {
+      if (profile.skip(monthsAgo)) continue;
+      const vendorId = vendorByName.get(profile.vendorName);
+      if (!vendorId) continue;
+
+      const issueDate = new Date(year, issueBase.getMonth(), profile.dayOfMonth);
+      // Skip future-dated invoices for the current month.
+      if (issueDate > today) continue;
+
+      const dueDate = new Date(issueDate);
+      dueDate.setDate(dueDate.getDate() + profile.netDays);
+
+      const amount = profile.amountFor(monthsAgo).toFixed(2);
+      const status = pickStatus(monthsAgo, issueDate.getDate());
+
       billValues.push({
         organizationId: orgId,
         vendorId,
-        invoiceNumber: `INV-${iso(new Date()).slice(0, 4)}-${monthsAgo}${i}`,
+        invoiceNumber: `INV-${year}-${String(invoiceCounter).padStart(5, "0")}`,
         amount,
-        issueDate: daysFromNow(issueOffset),
-        dueDate: daysFromNow(dueOffset),
+        issueDate: iso(issueDate),
+        dueDate: iso(dueDate),
         status,
         createdBy: admin.id,
       });
+      invoiceCounter++;
+    }
+
+    // A few ad-hoc one-off bills sprinkled in (consultants, hardware, travel),
+    // not every month — keeps the data lumpy and realistic.
+    if (rand() < 0.45) {
+      const vendorId = vendorRows[Math.floor(rand() * vendorRows.length)]!.id;
+      const day = 6 + Math.floor(rand() * 20);
+      const issueDate = new Date(year, issueBase.getMonth(), day);
+      if (issueDate <= today) {
+        const dueDate = new Date(issueDate);
+        dueDate.setDate(dueDate.getDate() + 30);
+        const amount = (300 + rand() * 4200).toFixed(2);
+        billValues.push({
+          organizationId: orgId,
+          vendorId,
+          invoiceNumber: `INV-${year}-${String(invoiceCounter).padStart(5, "0")}`,
+          amount,
+          issueDate: iso(issueDate),
+          dueDate: iso(dueDate),
+          status: pickStatus(monthsAgo, day),
+          createdBy: admin.id,
+          memo: "One-off expense",
+        });
+        invoiceCounter++;
+      }
     }
   }
 
   await db.insert(bills).values(billValues);
 
-  console.log(`Seed complete: inserted ${billValues.length} bills.`);
+  console.log(`Seed complete: inserted ${billValues.length} bills across 24 months.`);
   await pool.end();
 }
 
