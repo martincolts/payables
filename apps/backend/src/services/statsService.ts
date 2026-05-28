@@ -2,6 +2,8 @@ import {
   addMonths,
   defaultStatsWindow,
   monthsBetween,
+  type ApAgingQuery,
+  type ApAgingReport,
   type BillStatus,
   type DashboardStats,
   type MonthKey,
@@ -72,6 +74,56 @@ export function createStatsService(repo: StatsRepo) {
         appliedStatuses: statuses,
         from,
         to,
+      };
+    },
+
+    async getApAging(
+      organizationId: string,
+      query: ApAgingQuery,
+    ): Promise<ApAgingReport> {
+      const asOf = query.asOf ?? new Date().toISOString().slice(0, 10);
+      const rows = await repo.apAging(organizationId, asOf);
+      const totals = {
+        current: 0,
+        d1_30: 0,
+        d31_60: 0,
+        d61_90: 0,
+        d90_plus: 0,
+        total: 0,
+      };
+      const out = rows.map((r) => {
+        totals.current += Number(r.current);
+        totals.d1_30 += Number(r.d1_30);
+        totals.d31_60 += Number(r.d31_60);
+        totals.d61_90 += Number(r.d61_90);
+        totals.d90_plus += Number(r.d90_plus);
+        totals.total += Number(r.total);
+        return {
+          vendorId: r.vendorId,
+          vendorName: r.vendorName,
+          buckets: {
+            current: r.current,
+            d1_30: r.d1_30,
+            d31_60: r.d31_60,
+            d61_90: r.d61_90,
+            d90_plus: r.d90_plus,
+          },
+          total: r.total,
+        };
+      });
+      return {
+        asOf,
+        rows: out,
+        totals: {
+          buckets: {
+            current: totals.current.toFixed(2),
+            d1_30: totals.d1_30.toFixed(2),
+            d31_60: totals.d31_60.toFixed(2),
+            d61_90: totals.d61_90.toFixed(2),
+            d90_plus: totals.d90_plus.toFixed(2),
+          },
+          total: totals.total.toFixed(2),
+        },
       };
     },
   };

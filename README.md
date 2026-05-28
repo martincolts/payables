@@ -62,6 +62,15 @@ draft → pending_approval → approved → scheduled → paid
 - Bills overdue / due this week / pending approval
 - Quick-action shortcuts for the most common tasks
 
+### 6. AP Aging report
+- Vendor × aging-bucket pivot table (**Current / 1–30 / 31–60 / 61–90 / 90+**)
+  computed against a user-selectable **As of** date
+- Only unpaid bills are included; vendors with no exposure are hidden
+- Click any cell to drill into `/bills` pre-filtered by vendor + the bucket's
+  due-date window
+- **CSV export** of the report (`GET /api/stats/ap-aging.csv?asOf=...`) for
+  hand-off to spreadsheet workflows
+
 ---
 
 ## What was left out and why
@@ -73,7 +82,6 @@ draft → pending_approval → approved → scheduled → paid
 | Multi-currency | Adds complexity to every amount calculation; USD-only is a valid MVP constraint |
 | Recurring bills | Useful but a layer on top of the core flow |
 | ERP sync (QuickBooks, NetSuite) | Integration work, not product work |
-| AP Aging report | Valuable but derivable from bill data; dashboard metrics cover the essentials |
 | Multi-entity / subsidiaries | Enterprise feature, premature for MVP |
 
 ---

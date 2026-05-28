@@ -17,6 +17,7 @@ import {
 import MenuIcon from "@mui/icons-material/Menu";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
+import AssessmentIcon from "@mui/icons-material/Assessment";
 import StorefrontIcon from "@mui/icons-material/Storefront";
 import GroupIcon from "@mui/icons-material/Group";
 import HistoryIcon from "@mui/icons-material/History";
@@ -38,6 +39,7 @@ const NAV_ITEMS: readonly NavItem[] = [
   { label: "Dashboard", to: "/", icon: <DashboardIcon /> },
   { label: "Bills", to: "/bills", icon: <ReceiptLongIcon /> },
   { label: "Vendors", to: "/vendors", icon: <StorefrontIcon /> },
+  { label: "AP Aging", to: "/ap-aging", icon: <AssessmentIcon /> },
   { label: "Team", to: "/team", icon: <GroupIcon />, adminOnly: true },
   { label: "Activity", to: "/activity", icon: <HistoryIcon />, adminOnly: true },
   { label: "Settings", to: "/settings", icon: <SettingsIcon />, adminOnly: true },

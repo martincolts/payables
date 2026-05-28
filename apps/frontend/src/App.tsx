@@ -4,6 +4,7 @@ import { ProtectedRoute } from "./auth/ProtectedRoute";
 import { Dashboard } from "./pages/Dashboard";
 import { Vendors } from "./pages/Vendors";
 import { Bills } from "./pages/Bills";
+import { ApAging } from "./pages/ApAging";
 import { BillDetail } from "./pages/BillDetail";
 import { Team } from "./pages/Team";
 import { Settings } from "./pages/Settings";
@@ -28,6 +29,7 @@ export function App() {
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/bills" element={<Bills />} />
                 <Route path="/bills/:id" element={<BillDetail />} />
+                <Route path="/ap-aging" element={<ApAging />} />
                 <Route path="/vendors" element={<Vendors />} />
                 <Route
                   path="/team"

@@ -24,6 +24,17 @@ export type SummaryRow = {
   pendingApprovalCount: number;
 };
 
+export type ApAgingRow = {
+  vendorId: string;
+  vendorName: string;
+  current: string;
+  d1_30: string;
+  d31_60: string;
+  d61_90: string;
+  d90_plus: string;
+  total: string;
+};
+
 export type StatsRepo = {
   topVendorsByAmount(
     organizationId: string,
@@ -69,6 +80,7 @@ export type StatsRepo = {
     until: Date,
     today: string,
   ): Promise<SummaryRow>;
+  apAging(organizationId: string, asOf: string): Promise<ApAgingRow[]>;
 };
 
 function toDateOnly(d: Date): string {
@@ -219,6 +231,32 @@ export function createStatsRepo(db: DbExecutor): StatsRepo {
         )
         .groupBy(vendors.id, vendors.name, bills.status);
       return rows as VendorStatusStat[];
+    },
+
+    async apAging(organizationId, asOf) {
+      const rows = await db
+        .select({
+          vendorId: vendors.id,
+          vendorName: vendors.name,
+          current: sql<string>`coalesce(sum(${bills.amount}) filter (where ${bills.dueDate} >= ${asOf}::date), 0)::text`,
+          d1_30: sql<string>`coalesce(sum(${bills.amount}) filter (where ${bills.dueDate} < ${asOf}::date and ${bills.dueDate} >= ${asOf}::date - 30), 0)::text`,
+          d31_60: sql<string>`coalesce(sum(${bills.amount}) filter (where ${bills.dueDate} < ${asOf}::date - 30 and ${bills.dueDate} >= ${asOf}::date - 60), 0)::text`,
+          d61_90: sql<string>`coalesce(sum(${bills.amount}) filter (where ${bills.dueDate} < ${asOf}::date - 60 and ${bills.dueDate} >= ${asOf}::date - 90), 0)::text`,
+          d90_plus: sql<string>`coalesce(sum(${bills.amount}) filter (where ${bills.dueDate} < ${asOf}::date - 90), 0)::text`,
+          total: sql<string>`coalesce(sum(${bills.amount}), 0)::text`,
+        })
+        .from(bills)
+        .innerJoin(vendors, eq(bills.vendorId, vendors.id))
+        .where(
+          and(
+            eq(bills.organizationId, organizationId),
+            sql`${bills.status} <> 'paid'`,
+          ),
+        )
+        .groupBy(vendors.id, vendors.name)
+        .having(sql`sum(${bills.amount}) > 0`)
+        .orderBy(desc(sql`sum(${bills.amount})`));
+      return rows;
     },
 
     async monthlyByStatus(organizationId, since, until, statuses) {

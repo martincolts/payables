@@ -154,6 +154,114 @@ describe("stats (integration)", () => {
     await own.cleanup();
   });
 
+  describe("AP Aging", () => {
+    it("requires auth", async () => {
+      const res = await app.client.api.stats["ap-aging"].$get({ query: {} });
+      expect(res.status).toBe(401);
+    });
+
+    it("returns vendor x bucket pivot with computed totals row", async () => {
+      const own = await createTestApp();
+      const token = await authToken(own.client);
+      const alpha = await createVendor(own.client, token, { name: "Alpha" });
+      const bravo = await createVendor(own.client, token, { name: "Bravo" });
+
+      await createBill(own.client, token, alpha.id, {
+        issueDate: "2026-01-01",
+        dueDate: "2026-06-15",
+        lineItems: [{ description: "x", amount: "100.00" }],
+      });
+      await createBill(own.client, token, alpha.id, {
+        issueDate: "2026-01-01",
+        dueDate: "2026-03-01",
+        lineItems: [{ description: "x", amount: "400.00" }],
+      });
+      await createBill(own.client, token, bravo.id, {
+        issueDate: "2026-01-01",
+        dueDate: "2026-06-01",
+        lineItems: [{ description: "x", amount: "1000.00" }],
+      });
+
+      const res = await own.client.api.stats["ap-aging"].$get(
+        { query: { asOf: "2026-06-01" } },
+        authHeaders(token),
+      );
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.asOf).toBe("2026-06-01");
+      expect(body.rows.map((r) => r.vendorName)).toEqual(["Bravo", "Alpha"]);
+      const alphaRow = body.rows.find((r) => r.vendorName === "Alpha")!;
+      expect(alphaRow.buckets.current).toBe("100.00");
+      expect(alphaRow.buckets.d90_plus).toBe("400.00");
+      expect(alphaRow.total).toBe("500.00");
+      expect(body.totals.total).toBe("1500.00");
+      expect(body.totals.buckets.current).toBe("1100.00");
+      expect(body.totals.buckets.d90_plus).toBe("400.00");
+
+      await own.cleanup();
+    });
+
+    it("defaults asOf to today when omitted", async () => {
+      const own = await createTestApp();
+      const token = await authToken(own.client);
+      const res = await own.client.api.stats["ap-aging"].$get(
+        { query: {} },
+        authHeaders(token),
+      );
+      const body = await res.json();
+      expect(body.asOf).toBe(new Date().toISOString().slice(0, 10));
+      await own.cleanup();
+    });
+
+    it("scopes to caller's org", async () => {
+      const a = await createTestApp();
+      const b = await createTestApp();
+      const tokenA = await authToken(a.client);
+      const tokenB = await authToken(b.client);
+      const vendorB = await createVendor(b.client, tokenB, { name: "Other" });
+      await createBill(b.client, tokenB, vendorB.id, {
+        lineItems: [{ description: "x", amount: "777.00" }],
+      });
+
+      const res = await a.client.api.stats["ap-aging"].$get(
+        { query: {} },
+        authHeaders(tokenA),
+      );
+      const body = await res.json();
+      expect(body.rows).toEqual([]);
+      expect(body.totals.total).toBe("0.00");
+      await a.cleanup();
+      await b.cleanup();
+    });
+
+    it("CSV endpoint returns text/csv with header + totals row", async () => {
+      const own = await createTestApp();
+      const token = await authToken(own.client);
+      const vendor = await createVendor(own.client, token, { name: "Acme" });
+      await createBill(own.client, token, vendor.id, {
+        issueDate: "2026-01-01",
+        dueDate: "2026-06-15",
+        lineItems: [{ description: "x", amount: "100.00" }],
+      });
+
+      const res = await own.client.api.stats["ap-aging.csv"].$get(
+        { query: { asOf: "2026-06-01" } },
+        authHeaders(token),
+      );
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toContain("text/csv");
+      expect(res.headers.get("content-disposition")).toContain(
+        "ap-aging-2026-06-01.csv",
+      );
+      const text = await res.text();
+      const lines = text.trim().split("\n");
+      expect(lines[0]).toBe("Vendor,Current,1-30,31-60,61-90,90+,Total");
+      expect(lines[1]).toContain("Acme");
+      expect(lines[lines.length - 1]).toMatch(/^Total,/);
+      await own.cleanup();
+    });
+  });
+
   it("scopes to caller's org", async () => {
     const a = await createTestApp();
     const b = await createTestApp();

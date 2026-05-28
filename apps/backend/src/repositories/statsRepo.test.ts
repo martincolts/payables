@@ -285,4 +285,85 @@ describe("statsRepo", () => {
       expect(months).toContain("2026-04");
     });
   });
+
+  describe("apAging", () => {
+    let aOrg: string;
+    let aUser: string;
+    let alpha: SeededVendor;
+    let bravo: SeededVendor;
+    let dormant: SeededVendor;
+    const ASOF = "2026-06-01";
+
+    async function seedBillWithDueDate(
+      vendorId: string,
+      amount: string,
+      status: BillStatus,
+      dueDate: string,
+    ) {
+      await testDb.db.insert(bills).values({
+        organizationId: aOrg,
+        vendorId,
+        amount,
+        status,
+        issueDate: "2026-01-01",
+        dueDate,
+        createdBy: aUser,
+      });
+    }
+
+    beforeAll(async () => {
+      ({ organizationId: aOrg, ownerId: aUser } = await seedOrg(testDb.db));
+      alpha = await seedVendor(testDb.db, aOrg, "Alpha");
+      bravo = await seedVendor(testDb.db, aOrg, "Bravo");
+      dormant = await seedVendor(testDb.db, aOrg, "Dormant");
+      // Alpha total = 100 + 200 + 400 = 700
+      await seedBillWithDueDate(alpha.id, "100.00", "approved", "2026-06-15"); // current
+      await seedBillWithDueDate(alpha.id, "200.00", "approved", "2026-05-20"); // 1-30
+      await seedBillWithDueDate(alpha.id, "400.00", "approved", "2026-03-01"); // 61-90 (92 days)? 2026-06-01 - 2026-03-01 = 92 → 90+
+      // Bravo total = 50 + 1000 = 1050 (largest, ordered first)
+      await seedBillWithDueDate(bravo.id, "50.00", "approved", "2026-04-15"); // 31-60 (47 days)
+      await seedBillWithDueDate(bravo.id, "1000.00", "approved", "2026-06-01"); // current (== asOf)
+      // Paid bill should be excluded entirely
+      await seedBillWithDueDate(alpha.id, "9999.00", "paid", "2026-03-15");
+      // Dormant has no bills → excluded by HAVING
+    });
+
+    it("returns vendors ordered by total desc, paid excluded, dormant excluded", async () => {
+      const rows = await repo.apAging(aOrg, ASOF);
+      expect(rows.map((r) => r.vendorName)).toEqual(["Bravo", "Alpha"]);
+      expect(rows.find((r) => r.vendorName === "Dormant")).toBeUndefined();
+    });
+
+    it("buckets bills by days past due relative to asOf", async () => {
+      const rows = await repo.apAging(aOrg, ASOF);
+      const alphaRow = rows.find((r) => r.vendorName === "Alpha")!;
+      expect(alphaRow.current).toBe("100.00");
+      expect(alphaRow.d1_30).toBe("200.00");
+      expect(alphaRow.d31_60).toBe("0");
+      expect(alphaRow.d61_90).toBe("0");
+      expect(alphaRow.d90_plus).toBe("400.00");
+      expect(alphaRow.total).toBe("700.00");
+
+      const bravoRow = rows.find((r) => r.vendorName === "Bravo")!;
+      expect(bravoRow.current).toBe("1000.00");
+      expect(bravoRow.d31_60).toBe("50.00");
+      expect(bravoRow.total).toBe("1050.00");
+    });
+
+    it("scopes to organization", async () => {
+      const { organizationId: otherOrg } = await seedOrg(testDb.db);
+      const rows = await repo.apAging(otherOrg, ASOF);
+      expect(rows).toEqual([]);
+    });
+
+    it("shifts buckets when asOf changes", async () => {
+      // 90 days earlier: 2026-03-03
+      const rows = await repo.apAging(aOrg, "2026-03-03");
+      const alphaRow = rows.find((r) => r.vendorName === "Alpha")!;
+      // 2026-06-15, 2026-05-20, 2026-03-01 are all "future" relative to 2026-03-03 except the 03-01 one
+      // 03-01 is 2 days past due → d1_30
+      expect(alphaRow.d1_30).toBe("400.00");
+      expect(alphaRow.current).toBe("300.00"); // 100 + 200
+    });
+  });
 });
