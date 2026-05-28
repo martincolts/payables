@@ -1,29 +1,37 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
   Button,
   Card,
   CardContent,
   CardHeader,
+  Chip,
   CircularProgress,
   Grid,
+  Popover,
   Stack,
-  ToggleButton,
-  ToggleButtonGroup,
+  TextField,
   Typography,
   useMediaQuery,
   useTheme,
   type Theme,
 } from "@mui/material";
+import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 import { BarChart } from "@mui/x-charts/BarChart";
 import { LineChart } from "@mui/x-charts/LineChart";
 import { PieChart } from "@mui/x-charts/PieChart";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
-import type { BillStatus, StatsRange } from "@payables/shared";
-import { useBills } from "../queries/useBills";
-import { useDashboardStats } from "../queries/useDashboardStats";
-import { formatMoney, isOverdue } from "../lib/format";
+import {
+  addMonths,
+  currentMonthKey,
+  defaultStatsWindow,
+  monthsBetween,
+  type BillStatus,
+  type MonthKey,
+} from "@payables/shared";
+import { useDashboardStats, type StatsWindow } from "../queries/useDashboardStats";
+import { formatMoney } from "../lib/format";
 
 function MetricCard({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
@@ -74,6 +82,14 @@ function formatMonthLabel(month: string): string {
   });
 }
 
+function formatMonthLong(month: MonthKey): string {
+  const [y, m] = month.split("-").map(Number);
+  return new Date(y!, m! - 1, 1).toLocaleString("en-US", {
+    month: "short",
+    year: "numeric",
+  });
+}
+
 function truncate(s: string, max: number): string {
   return s.length > max ? `${s.slice(0, max - 1)}…` : s;
 }
@@ -95,41 +111,175 @@ const VENDOR_PALETTE = [
 
 type MonthlyView = "total" | "perVendor";
 
-const RANGE_LABEL: Record<StatsRange, string> = {
-  "6m": "Last 6 months",
-  "12m": "Last 12 months",
-  "24m": "Last 24 months",
-};
+type PresetId = "3m" | "6m" | "12m" | "24m" | "ytd";
+
+const PRESETS: { id: PresetId; label: string }[] = [
+  { id: "3m", label: "3m" },
+  { id: "6m", label: "6m" },
+  { id: "12m", label: "12m" },
+  { id: "24m", label: "24m" },
+  { id: "ytd", label: "YTD" },
+];
+
+function presetWindow(id: PresetId): StatsWindow {
+  const to = currentMonthKey();
+  switch (id) {
+    case "3m":
+      return { from: addMonths(to, -2), to };
+    case "6m":
+      return { from: addMonths(to, -5), to };
+    case "12m":
+      return { from: addMonths(to, -11), to };
+    case "24m":
+      return { from: addMonths(to, -23), to };
+    case "ytd":
+      return { from: `${to.slice(0, 4)}-01`, to };
+  }
+}
+
+function matchedPreset(w: StatsWindow): PresetId | null {
+  for (const p of PRESETS) {
+    const pw = presetWindow(p.id);
+    if (pw.from === w.from && pw.to === w.to) return p.id;
+  }
+  return null;
+}
+
+function windowLabel(w: StatsWindow): string {
+  return `${formatMonthLong(w.from)} – ${formatMonthLong(w.to)}`;
+}
+
+function RangePicker({
+  value,
+  onChange,
+}: {
+  value: StatsWindow;
+  onChange: (w: StatsWindow) => void;
+}) {
+  const anchorRef = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const [from, setFrom] = useState<MonthKey>(value.from);
+  const [to, setTo] = useState<MonthKey>(value.to);
+  const [error, setError] = useState<string | null>(null);
+  const active = matchedPreset(value);
+
+  function openPopover() {
+    setFrom(value.from);
+    setTo(value.to);
+    setError(null);
+    setOpen(true);
+  }
+
+  function apply() {
+    if (from > to) {
+      setError("From must be on or before To");
+      return;
+    }
+    if (monthsBetween(from, to) > 60) {
+      setError("Range can be at most 60 months");
+      return;
+    }
+    onChange({ from, to });
+    setOpen(false);
+  }
+
+  return (
+    <>
+      <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: "wrap" }}>
+        {PRESETS.map((p) => (
+          <Chip
+            key={p.id}
+            label={p.label}
+            size="small"
+            color={active === p.id ? "primary" : "default"}
+            variant={active === p.id ? "filled" : "outlined"}
+            onClick={() => onChange(presetWindow(p.id))}
+            clickable
+          />
+        ))}
+        <Button
+          ref={anchorRef}
+          onClick={openPopover}
+          size="small"
+          variant={active === null ? "contained" : "outlined"}
+          startIcon={<CalendarMonthIcon fontSize="small" />}
+          sx={{ textTransform: "none" }}
+        >
+          {active === null ? windowLabel(value) : "Custom"}
+        </Button>
+      </Stack>
+      <Popover
+        open={open}
+        anchorEl={anchorRef.current}
+        onClose={() => setOpen(false)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+      >
+        <Box sx={{ p: 2, width: 280 }}>
+          <Typography variant="subtitle2" sx={{ mb: 1.5 }}>
+            Custom range
+          </Typography>
+          <Stack spacing={2}>
+            <TextField
+              label="From"
+              type="month"
+              size="small"
+              value={from}
+              onChange={(e) => setFrom(e.target.value as MonthKey)}
+              slotProps={{ inputLabel: { shrink: true } }}
+              fullWidth
+            />
+            <TextField
+              label="To"
+              type="month"
+              size="small"
+              value={to}
+              onChange={(e) => setTo(e.target.value as MonthKey)}
+              slotProps={{ inputLabel: { shrink: true } }}
+              fullWidth
+            />
+            {error && (
+              <Typography variant="caption" color="error">
+                {error}
+              </Typography>
+            )}
+            <Stack direction="row" spacing={1} sx={{ justifyContent: "flex-end" }}>
+              <Button size="small" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+              <Button size="small" variant="contained" onClick={apply}>
+                Apply
+              </Button>
+            </Stack>
+          </Stack>
+        </Box>
+      </Popover>
+    </>
+  );
+}
 
 export function Dashboard() {
   const theme = useTheme();
   const isSm = useMediaQuery(theme.breakpoints.down("sm"));
 
-  const { data: billsData, isLoading: billsLoading, isError: billsError } = useBills({
-    page: 1,
-    pageSize: 100,
+  const [window, setWindow] = useState<StatsWindow>(() => {
+    const d = defaultStatsWindow();
+    return { from: d.from, to: d.to };
   });
-
-  const [range, setRange] = useState<StatsRange>("12m");
   const [monthlyView, setMonthlyView] = useState<MonthlyView>("total");
-  const { data: stats, isLoading: statsLoading, isError: statsError } = useDashboardStats(range);
+  const { data: stats, isLoading: statsLoading, isError: statsError } = useDashboardStats(window);
 
-  useEffect(() => {
-    if (billsError) toast.error("Couldn't load metrics");
-  }, [billsError]);
   useEffect(() => {
     if (statsError) toast.error("Couldn't load stats");
   }, [statsError]);
 
-  const bills = billsData?.items ?? [];
-  const outstanding = bills
-    .filter((b) => b.status !== "paid")
-    .reduce((sum, b) => sum + Number(b.amount), 0);
-  const overdueCount = bills.filter((b) => isOverdue(b.dueDate, b.status)).length;
-  const pendingCount = bills.filter((b) => b.status === "pending_approval").length;
+  const summary = stats?.summary;
+  const outstanding = summary?.totalOutstanding ?? "0";
+  const overdueCount = summary?.overdueCount ?? 0;
+  const pendingCount = summary?.pendingApprovalCount ?? 0;
 
   const vendorBars = useMemo(() => {
-    const items = [...(stats?.topVendors ?? [])].reverse(); // largest at top in horizontal layout
+    const items = [...(stats?.topVendors ?? [])].reverse();
     return {
       names: items.map((v) => truncate(v.vendorName, isSm ? 14 : 22)),
       values: items.map((v) => Number(v.totalAmount)),
@@ -164,6 +314,7 @@ export function Dashboard() {
 
   const chartHeight = isSm ? 240 : 320;
   const monthlyChartHeight = isSm ? 260 : 360;
+  const rangeSubtitle = windowLabel(window);
 
   return (
     <Box>
@@ -182,24 +333,13 @@ export function Dashboard() {
             Dashboard
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            {RANGE_LABEL[range]}
+            {rangeSubtitle}
           </Typography>
         </Box>
-        <ToggleButtonGroup
-          size="small"
-          exclusive
-          value={range}
-          onChange={(_, v) => v && setRange(v as StatsRange)}
-          aria-label="Time range"
-          color="primary"
-        >
-          <ToggleButton value="6m">6m</ToggleButton>
-          <ToggleButton value="12m">12m</ToggleButton>
-          <ToggleButton value="24m">24m</ToggleButton>
-        </ToggleButtonGroup>
+        <RangePicker value={window} onChange={setWindow} />
       </Box>
 
-      {billsLoading ? (
+      {statsLoading && !stats ? (
         <Box sx={{ display: "flex", justifyContent: "center", p: 4 }}>
           <CircularProgress aria-label="Loading metrics" />
         </Box>
@@ -207,7 +347,7 @@ export function Dashboard() {
         <>
           <Grid container spacing={2} sx={{ mb: 3 }}>
             <Grid size={{ xs: 12, sm: 4 }}>
-              <MetricCard label="Total outstanding" value={formatMoney(String(outstanding))} />
+              <MetricCard label="Total outstanding" value={formatMoney(outstanding)} />
             </Grid>
             <Grid size={{ xs: 12, sm: 4 }}>
               <MetricCard
@@ -226,7 +366,7 @@ export function Dashboard() {
               <Card variant="outlined" sx={{ height: "100%" }}>
                 <CardHeader
                   title="Top vendors by amount"
-                  subheader={RANGE_LABEL[range]}
+                  subheader={rangeSubtitle}
                   titleTypographyProps={{ variant: "subtitle1", fontWeight: 600 }}
                   subheaderTypographyProps={{ variant: "caption" }}
                 />
@@ -278,7 +418,7 @@ export function Dashboard() {
               <Card variant="outlined" sx={{ height: "100%" }}>
                 <CardHeader
                   title="Bills by status"
-                  subheader={RANGE_LABEL[range]}
+                  subheader={rangeSubtitle}
                   titleTypographyProps={{ variant: "subtitle1", fontWeight: 600 }}
                   subheaderTypographyProps={{ variant: "caption" }}
                 />
@@ -323,23 +463,30 @@ export function Dashboard() {
                   title="Monthly cost trend"
                   subheader={
                     monthlyView === "total"
-                      ? `Total — ${RANGE_LABEL[range].toLowerCase()}`
-                      : `Top vendors — ${RANGE_LABEL[range].toLowerCase()}`
+                      ? `Total — ${rangeSubtitle}`
+                      : `Top vendors — ${rangeSubtitle}`
                   }
                   titleTypographyProps={{ variant: "subtitle1", fontWeight: 600 }}
                   subheaderTypographyProps={{ variant: "caption" }}
                   action={
-                    <ToggleButtonGroup
-                      size="small"
-                      exclusive
-                      value={monthlyView}
-                      onChange={(_, v) => v && setMonthlyView(v as MonthlyView)}
-                      aria-label="Monthly chart view"
-                      color="primary"
-                    >
-                      <ToggleButton value="total">Total</ToggleButton>
-                      <ToggleButton value="perVendor">Per vendor</ToggleButton>
-                    </ToggleButtonGroup>
+                    <Stack direction="row" spacing={1}>
+                      <Chip
+                        label="Total"
+                        size="small"
+                        color={monthlyView === "total" ? "primary" : "default"}
+                        variant={monthlyView === "total" ? "filled" : "outlined"}
+                        onClick={() => setMonthlyView("total")}
+                        clickable
+                      />
+                      <Chip
+                        label="Per vendor"
+                        size="small"
+                        color={monthlyView === "perVendor" ? "primary" : "default"}
+                        variant={monthlyView === "perVendor" ? "filled" : "outlined"}
+                        onClick={() => setMonthlyView("perVendor")}
+                        clickable
+                      />
+                    </Stack>
                   }
                   sx={{ flexWrap: "wrap", gap: 1, "& .MuiCardHeader-action": { m: 0 } }}
                 />
@@ -404,7 +551,7 @@ export function Dashboard() {
               <Card variant="outlined">
                 <CardHeader
                   title="Bill volume per month"
-                  subheader={`Number of bills issued — ${RANGE_LABEL[range].toLowerCase()}`}
+                  subheader={`Number of bills issued — ${rangeSubtitle}`}
                   titleTypographyProps={{ variant: "subtitle1", fontWeight: 600 }}
                   subheaderTypographyProps={{ variant: "caption" }}
                 />

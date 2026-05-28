@@ -78,10 +78,11 @@ describe("statsRepo", () => {
   });
 
   const EPOCH = new Date(Date.UTC(2000, 0, 1));
+  const FAR_FUTURE = new Date(Date.UTC(2100, 0, 1));
 
   describe("topVendorsByAmount", () => {
     it("orders vendors by total amount desc", async () => {
-      const rows = await repo.topVendorsByAmount(orgId, EPOCH);
+      const rows = await repo.topVendorsByAmount(orgId, EPOCH, FAR_FUTURE);
       expect(rows.map((r) => r.vendorName)).toEqual(["Globex", "Acme", "Initech"]);
       expect(rows[0]!.totalAmount).toBe("1000.00");
       expect(rows[1]!.totalAmount).toBe("300.00");
@@ -89,25 +90,38 @@ describe("statsRepo", () => {
     });
 
     it("respects the limit", async () => {
-      const rows = await repo.topVendorsByAmount(orgId, EPOCH, 2);
+      const rows = await repo.topVendorsByAmount(orgId, EPOCH, FAR_FUTURE, 2);
       expect(rows).toHaveLength(2);
     });
 
     it("scopes to org", async () => {
       const { organizationId: otherOrg } = await seedOrg(testDb.db);
-      const rows = await repo.topVendorsByAmount(otherOrg, EPOCH);
+      const rows = await repo.topVendorsByAmount(otherOrg, EPOCH, FAR_FUTURE);
       expect(rows).toEqual([]);
     });
 
     it("excludes bills issued before `since`", async () => {
-      const rows = await repo.topVendorsByAmount(orgId, new Date(Date.UTC(2026, 4, 1)));
+      const rows = await repo.topVendorsByAmount(
+        orgId,
+        new Date(Date.UTC(2026, 4, 1)),
+        FAR_FUTURE,
+      );
       expect(rows.map((r) => r.vendorName)).toEqual(["Initech"]);
+    });
+
+    it("excludes bills issued on/after `until`", async () => {
+      const rows = await repo.topVendorsByAmount(
+        orgId,
+        EPOCH,
+        new Date(Date.UTC(2026, 3, 1)),
+      );
+      expect(rows.map((r) => r.vendorName).sort()).toEqual(["Acme", "Globex"]);
     });
   });
 
   describe("countsByStatus", () => {
     it("groups bills by status", async () => {
-      const rows = await repo.countsByStatus(orgId, EPOCH);
+      const rows = await repo.countsByStatus(orgId, EPOCH, FAR_FUTURE);
       const byStatus = Object.fromEntries(rows.map((r) => [r.status, r]));
       expect(byStatus.paid!.count).toBe(1);
       expect(byStatus.paid!.totalAmount).toBe("100.00");
@@ -118,14 +132,21 @@ describe("statsRepo", () => {
     });
 
     it("excludes bills issued before `since`", async () => {
-      const rows = await repo.countsByStatus(orgId, new Date(Date.UTC(2026, 4, 1)));
+      const rows = await repo.countsByStatus(
+        orgId,
+        new Date(Date.UTC(2026, 4, 1)),
+        FAR_FUTURE,
+      );
       expect(rows.map((r) => r.status).sort()).toEqual(["pending_approval"]);
     });
   });
 
   describe("monthlyByVendor", () => {
     it("returns monthly buckets for the given vendor ids", async () => {
-      const rows = await repo.monthlyByVendor(orgId, EPOCH, [acme.id, globex.id]);
+      const rows = await repo.monthlyByVendor(orgId, EPOCH, FAR_FUTURE, [
+        acme.id,
+        globex.id,
+      ]);
       const acmeMar = rows.find((r) => r.vendorId === acme.id && r.month === "2026-03");
       const globexFeb = rows.find((r) => r.vendorId === globex.id && r.month === "2026-02");
       expect(acmeMar!.totalAmount).toBe("100.00");
@@ -134,14 +155,44 @@ describe("statsRepo", () => {
     });
 
     it("returns [] when no vendor ids are given", async () => {
-      const rows = await repo.monthlyByVendor(orgId, EPOCH, []);
+      const rows = await repo.monthlyByVendor(orgId, EPOCH, FAR_FUTURE, []);
       expect(rows).toEqual([]);
+    });
+  });
+
+  describe("summary", () => {
+    it("aggregates outstanding amount and pending approval count", async () => {
+      const row = await repo.summary(orgId, EPOCH, FAR_FUTURE, "2026-06-01");
+      // Outstanding = all except `paid`. Acme paid 100 -> excluded. 200+1000+50=1250.
+      expect(row.totalOutstanding).toBe("1250.00");
+      expect(row.pendingApprovalCount).toBe(1);
+    });
+
+    it("counts overdue bills as those past today and not paid", async () => {
+      // today=2026-04-15: due dates 2026-03-15 (acme paid → excluded), 2026-04-01 (draft, due 2026-04-01 < today → overdue), 2026-02-10 (approved → overdue), 2026-05-01 (pending, due 2026-05-01 → not yet)
+      const row = await repo.summary(orgId, EPOCH, FAR_FUTURE, "2026-04-15");
+      expect(row.overdueCount).toBe(2);
+    });
+
+    it("respects the date window", async () => {
+      const row = await repo.summary(
+        orgId,
+        new Date(Date.UTC(2026, 4, 1)),
+        FAR_FUTURE,
+        "2026-06-01",
+      );
+      expect(row.totalOutstanding).toBe("50.00");
+      expect(row.pendingApprovalCount).toBe(1);
     });
   });
 
   describe("monthlyTotals", () => {
     it("buckets bills into YYYY-MM groups", async () => {
-      const rows = await repo.monthlyTotals(orgId, new Date(Date.UTC(2026, 0, 1)));
+      const rows = await repo.monthlyTotals(
+        orgId,
+        new Date(Date.UTC(2026, 0, 1)),
+        FAR_FUTURE,
+      );
       const byMonth = Object.fromEntries(rows.map((r) => [r.month, r]));
       expect(byMonth["2026-02"]!.totalAmount).toBe("1000.00");
       expect(byMonth["2026-03"]!.totalAmount).toBe("100.00");
@@ -150,7 +201,11 @@ describe("statsRepo", () => {
     });
 
     it("excludes bills issued before `since`", async () => {
-      const rows = await repo.monthlyTotals(orgId, new Date(Date.UTC(2026, 3, 1)));
+      const rows = await repo.monthlyTotals(
+        orgId,
+        new Date(Date.UTC(2026, 3, 1)),
+        FAR_FUTURE,
+      );
       const months = rows.map((r) => r.month);
       expect(months).not.toContain("2026-02");
       expect(months).not.toContain("2026-03");

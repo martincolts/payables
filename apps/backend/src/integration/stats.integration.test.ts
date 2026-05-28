@@ -30,6 +30,11 @@ describe("stats (integration)", () => {
     expect(body.topVendors).toEqual([]);
     expect(body.byStatus).toEqual([]);
     expect(body.monthlyByVendor).toEqual([]);
+    expect(body.summary).toEqual({
+      totalOutstanding: "0",
+      overdueCount: 0,
+      pendingApprovalCount: 0,
+    });
     // 12 zero-filled months by default.
     expect(body.monthly).toHaveLength(12);
     expect(body.monthly.every((m) => m.billCount === 0 && m.totalAmount === "0")).toBe(true);
@@ -54,7 +59,7 @@ describe("stats (integration)", () => {
     });
 
     const res = await own.client.api.stats.dashboard.$get(
-      { query: { range: "12m" } },
+      { query: {} },
       authHeaders(token),
     );
     expect(res.status).toBe(200);
@@ -83,15 +88,30 @@ describe("stats (integration)", () => {
     await own.cleanup();
   });
 
-  it("range=6m returns 6 monthly buckets", async () => {
+  it("explicit from/to returns the exact month range", async () => {
     const own = await createTestApp();
     const token = await authToken(own.client);
     const res = await own.client.api.stats.dashboard.$get(
-      { query: { range: "6m" } },
+      { query: { from: "2026-01", to: "2026-06" } },
       authHeaders(token),
     );
     const body = await res.json();
     expect(body.monthly).toHaveLength(6);
+    expect(body.from).toBe("2026-01");
+    expect(body.to).toBe("2026-06");
+    expect(body.monthly[0]!.month).toBe("2026-01");
+    expect(body.monthly[5]!.month).toBe("2026-06");
+    await own.cleanup();
+  });
+
+  it("rejects from > to", async () => {
+    const own = await createTestApp();
+    const token = await authToken(own.client);
+    const res = await own.client.api.stats.dashboard.$get(
+      { query: { from: "2026-06", to: "2026-01" } },
+      authHeaders(token),
+    );
+    expect(res.status).toBe(400);
     await own.cleanup();
   });
 

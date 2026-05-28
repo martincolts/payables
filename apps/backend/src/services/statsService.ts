@@ -1,6 +1,9 @@
 import {
-  statsRangeToMonths,
+  addMonths,
+  defaultStatsWindow,
+  monthsBetween,
   type DashboardStats,
+  type MonthKey,
   type MonthlyStat,
   type StatsQuery,
   type VendorMonthlySeries,
@@ -17,53 +20,69 @@ export function createStatsService(repo: StatsRepo) {
       organizationId: string,
       query: StatsQuery,
     ): Promise<DashboardStats> {
-      const months = statsRangeToMonths(query.range);
-      const since = startOfMonthNMonthsAgo(months);
+      const { from, to } = resolveWindow(query);
+      const months = monthsBetween(from, to);
+      const since = monthKeyToDate(from);
+      const until = monthKeyToDate(addMonths(to, 1));
 
-      const [topVendors, byStatus, monthly] = await Promise.all([
-        repo.topVendorsByAmount(organizationId, since),
-        repo.countsByStatus(organizationId, since),
-        repo.monthlyTotals(organizationId, since),
+      const today = new Date().toISOString().slice(0, 10);
+      const [topVendors, byStatus, monthly, summary] = await Promise.all([
+        repo.topVendorsByAmount(organizationId, since, until),
+        repo.countsByStatus(organizationId, since, until),
+        repo.monthlyTotals(organizationId, since, until),
+        repo.summary(organizationId, since, until, today),
       ]);
 
       const topIds = topVendors.slice(0, PER_VENDOR_TOP_N).map((v) => v.vendorId);
-      const perVendorRows = await repo.monthlyByVendor(organizationId, since, topIds);
+      const perVendorRows = await repo.monthlyByVendor(
+        organizationId,
+        since,
+        until,
+        topIds,
+      );
 
       return {
+        summary,
         topVendors,
         byStatus,
-        monthly: zeroFillMonths(monthly, since, months),
+        monthly: zeroFillMonths(monthly, from, months),
         monthlyByVendor: pivotPerVendor(
           perVendorRows,
           topVendors.slice(0, PER_VENDOR_TOP_N).map((v) => ({
             vendorId: v.vendorId,
             vendorName: v.vendorName,
           })),
-          since,
+          from,
           months,
         ),
+        from,
+        to,
       };
     },
   };
 }
 
-function startOfMonthNMonthsAgo(months: number): Date {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (months - 1), 1));
+function resolveWindow(query: StatsQuery): { from: MonthKey; to: MonthKey } {
+  const defaults = defaultStatsWindow();
+  const to = query.to ?? defaults.to;
+  const from = query.from ?? (query.to ? addMonths(to, -11) : defaults.from);
+  return { from, to };
 }
 
-function monthKeysFrom(from: Date, months: number): string[] {
+function monthKeyToDate(key: MonthKey): Date {
+  const [y, m] = key.split("-").map(Number) as [number, number];
+  return new Date(Date.UTC(y, m - 1, 1));
+}
+
+function monthKeysFrom(from: MonthKey, months: number): string[] {
   const keys: string[] = [];
-  for (let i = 0; i < months; i++) {
-    const d = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth() + i, 1));
-    keys.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
-  }
+  for (let i = 0; i < months; i++) keys.push(addMonths(from, i));
   return keys;
 }
 
 function zeroFillMonths(
   rows: MonthlyStat[],
-  from: Date,
+  from: MonthKey,
   months: number,
 ): MonthlyStat[] {
   const byMonth = new Map(rows.map((r) => [r.month, r]));
@@ -75,7 +94,7 @@ function zeroFillMonths(
 function pivotPerVendor(
   rows: VendorMonthlyRow[],
   vendors: { vendorId: string; vendorName: string }[],
-  from: Date,
+  from: MonthKey,
   months: number,
 ): VendorMonthlySeries[] {
   const keys = monthKeysFrom(from, months);

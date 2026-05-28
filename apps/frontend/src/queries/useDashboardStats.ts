@@ -1,12 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
-import type { StatsRange } from "@payables/shared";
+import type { MonthKey } from "@payables/shared";
 import { api } from "../api/client";
 
-export function useDashboardStats(range: StatsRange = "12m") {
+export type StatsWindow = { from: MonthKey; to: MonthKey };
+
+export function useDashboardStats(window: StatsWindow) {
   return useQuery({
-    queryKey: ["stats", "dashboard", range],
+    queryKey: ["stats", "dashboard", window.from, window.to],
     queryFn: async () => {
-      const res = await api.api.stats.dashboard.$get({ query: { range } });
+      const res = await api.api.stats.dashboard.$get({
+        query: { from: window.from, to: window.to },
+      });
       if (!res.ok) throw new Error("Couldn't load stats");
       return res.json();
     },
