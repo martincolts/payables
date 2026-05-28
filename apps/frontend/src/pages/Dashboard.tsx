@@ -78,6 +78,29 @@ function truncate(s: string, max: number): string {
   return s.length > max ? `${s.slice(0, max - 1)}…` : s;
 }
 
+function compactMoney(v: number): string {
+  if (Math.abs(v) >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
+  if (Math.abs(v) >= 1_000) return `$${(v / 1_000).toFixed(0)}k`;
+  return `$${v}`;
+}
+
+const VENDOR_PALETTE = [
+  "#1976d2",
+  "#9c27b0",
+  "#2e7d32",
+  "#ed6c02",
+  "#0288d1",
+  "#7b1fa2",
+];
+
+type MonthlyView = "total" | "perVendor";
+
+const RANGE_LABEL: Record<StatsRange, string> = {
+  "6m": "Last 6 months",
+  "12m": "Last 12 months",
+  "24m": "Last 24 months",
+};
+
 export function Dashboard() {
   const theme = useTheme();
   const isSm = useMediaQuery(theme.breakpoints.down("sm"));
@@ -88,6 +111,7 @@ export function Dashboard() {
   });
 
   const [range, setRange] = useState<StatsRange>("12m");
+  const [monthlyView, setMonthlyView] = useState<MonthlyView>("total");
   const { data: stats, isLoading: statsLoading, isError: statsError } = useDashboardStats(range);
 
   useEffect(() => {
@@ -105,9 +129,9 @@ export function Dashboard() {
   const pendingCount = bills.filter((b) => b.status === "pending_approval").length;
 
   const vendorBars = useMemo(() => {
-    const items = stats?.topVendors ?? [];
+    const items = [...(stats?.topVendors ?? [])].reverse(); // largest at top in horizontal layout
     return {
-      names: items.map((v) => truncate(v.vendorName, isSm ? 8 : 14)),
+      names: items.map((v) => truncate(v.vendorName, isSm ? 14 : 22)),
       values: items.map((v) => Number(v.totalAmount)),
     };
   }, [stats, isSm]);
@@ -124,14 +148,56 @@ export function Dashboard() {
   const monthly = stats?.monthly ?? [];
   const monthLabels = monthly.map((m) => formatMonthLabel(m.month));
   const monthValues = monthly.map((m) => Number(m.totalAmount));
+  const monthCounts = monthly.map((m) => m.billCount);
+
+  const perVendorSeries = useMemo(() => {
+    const series = stats?.monthlyByVendor ?? [];
+    return series.map((s, i) => ({
+      data: s.points.map((p) => Number(p.totalAmount)),
+      label: s.vendorName,
+      color: VENDOR_PALETTE[i % VENDOR_PALETTE.length],
+      curve: "monotoneX" as const,
+      showMark: !isSm,
+      valueFormatter: (v: number | null) => (v == null ? "" : formatMoney(String(v))),
+    }));
+  }, [stats, isSm]);
 
   const chartHeight = isSm ? 240 : 320;
+  const monthlyChartHeight = isSm ? 260 : 360;
 
   return (
     <Box>
-      <Typography variant="h5" component="h1" gutterBottom>
-        Dashboard
-      </Typography>
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: { xs: "column", sm: "row" },
+          gap: 2,
+          alignItems: { xs: "flex-start", sm: "center" },
+          justifyContent: "space-between",
+          mb: 3,
+        }}
+      >
+        <Box>
+          <Typography variant="h5" component="h1">
+            Dashboard
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {RANGE_LABEL[range]}
+          </Typography>
+        </Box>
+        <ToggleButtonGroup
+          size="small"
+          exclusive
+          value={range}
+          onChange={(_, v) => v && setRange(v as StatsRange)}
+          aria-label="Time range"
+          color="primary"
+        >
+          <ToggleButton value="6m">6m</ToggleButton>
+          <ToggleButton value="12m">12m</ToggleButton>
+          <ToggleButton value="24m">24m</ToggleButton>
+        </ToggleButtonGroup>
+      </Box>
 
       {billsLoading ? (
         <Box sx={{ display: "flex", justifyContent: "center", p: 4 }}>
@@ -160,7 +226,9 @@ export function Dashboard() {
               <Card variant="outlined" sx={{ height: "100%" }}>
                 <CardHeader
                   title="Top vendors by amount"
+                  subheader={RANGE_LABEL[range]}
                   titleTypographyProps={{ variant: "subtitle1", fontWeight: 600 }}
+                  subheaderTypographyProps={{ variant: "caption" }}
                 />
                 <CardContent sx={{ pt: 0 }}>
                   {statsLoading ? (
@@ -169,24 +237,23 @@ export function Dashboard() {
                     </Box>
                   ) : vendorBars.values.length === 0 ? (
                     <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: "center" }}>
-                      No bills yet.
+                      No bills in this range.
                     </Typography>
                   ) : (
                     <BarChart
                       height={chartHeight}
-                      xAxis={[
+                      layout="horizontal"
+                      yAxis={[
                         {
                           data: vendorBars.names,
                           scaleType: "band",
-                          tickLabelStyle: isSm
-                            ? { fontSize: 10, angle: -35, textAnchor: "end" }
-                            : { fontSize: 12 },
+                          tickLabelStyle: { fontSize: isSm ? 10 : 12 },
                         },
                       ]}
-                      yAxis={[
+                      xAxis={[
                         {
-                          valueFormatter: (v: number) =>
-                            v >= 1000 ? `$${(v / 1000).toFixed(0)}k` : `$${v}`,
+                          valueFormatter: compactMoney,
+                          tickLabelStyle: { fontSize: 11 },
                         },
                       ]}
                       series={[
@@ -197,8 +264,10 @@ export function Dashboard() {
                           label: "Total billed",
                         },
                       ]}
-                      margin={{ left: 60, right: 16, top: 16, bottom: isSm ? 56 : 32 }}
+                      borderRadius={4}
+                      margin={{ left: isSm ? 90 : 130, right: 24, top: 16, bottom: 32 }}
                       hideLegend
+                      grid={{ vertical: true }}
                     />
                   )}
                 </CardContent>
@@ -209,7 +278,9 @@ export function Dashboard() {
               <Card variant="outlined" sx={{ height: "100%" }}>
                 <CardHeader
                   title="Bills by status"
+                  subheader={RANGE_LABEL[range]}
                   titleTypographyProps={{ variant: "subtitle1", fontWeight: 600 }}
+                  subheaderTypographyProps={{ variant: "caption" }}
                 />
                 <CardContent sx={{ pt: 0 }}>
                   {statsLoading ? (
@@ -218,7 +289,7 @@ export function Dashboard() {
                     </Box>
                   ) : statusSlices.length === 0 ? (
                     <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: "center" }}>
-                      No bills yet.
+                      No bills in this range.
                     </Typography>
                   ) : (
                     <PieChart
@@ -226,11 +297,13 @@ export function Dashboard() {
                       series={[
                         {
                           data: statusSlices,
-                          innerRadius: isSm ? 40 : 56,
+                          innerRadius: isSm ? 48 : 64,
+                          outerRadius: isSm ? 96 : 120,
                           paddingAngle: 2,
-                          cornerRadius: 4,
+                          cornerRadius: 6,
                           arcLabel: (item) => String(item.value),
-                          arcLabelMinAngle: 20,
+                          arcLabelMinAngle: 18,
+                          highlightScope: { fade: "global", highlight: "item" },
                         },
                       ]}
                       slotProps={{
@@ -248,18 +321,24 @@ export function Dashboard() {
               <Card variant="outlined">
                 <CardHeader
                   title="Monthly cost trend"
+                  subheader={
+                    monthlyView === "total"
+                      ? `Total — ${RANGE_LABEL[range].toLowerCase()}`
+                      : `Top vendors — ${RANGE_LABEL[range].toLowerCase()}`
+                  }
                   titleTypographyProps={{ variant: "subtitle1", fontWeight: 600 }}
+                  subheaderTypographyProps={{ variant: "caption" }}
                   action={
                     <ToggleButtonGroup
                       size="small"
                       exclusive
-                      value={range}
-                      onChange={(_, v) => v && setRange(v as StatsRange)}
-                      aria-label="Time range"
+                      value={monthlyView}
+                      onChange={(_, v) => v && setMonthlyView(v as MonthlyView)}
+                      aria-label="Monthly chart view"
+                      color="primary"
                     >
-                      <ToggleButton value="6m">6m</ToggleButton>
-                      <ToggleButton value="12m">12m</ToggleButton>
-                      <ToggleButton value="24m">24m</ToggleButton>
+                      <ToggleButton value="total">Total</ToggleButton>
+                      <ToggleButton value="perVendor">Per vendor</ToggleButton>
                     </ToggleButtonGroup>
                   }
                   sx={{ flexWrap: "wrap", gap: 1, "& .MuiCardHeader-action": { m: 0 } }}
@@ -269,9 +348,13 @@ export function Dashboard() {
                     <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
                       <CircularProgress size={28} aria-label="Loading monthly stats" />
                     </Box>
+                  ) : monthlyView === "perVendor" && perVendorSeries.length === 0 ? (
+                    <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: "center" }}>
+                      No vendor activity in this range.
+                    </Typography>
                   ) : (
                     <LineChart
-                      height={chartHeight}
+                      height={monthlyChartHeight}
                       xAxis={[
                         {
                           data: monthLabels,
@@ -281,22 +364,82 @@ export function Dashboard() {
                       ]}
                       yAxis={[
                         {
-                          valueFormatter: (v: number) =>
-                            v >= 1000 ? `$${(v / 1000).toFixed(0)}k` : `$${v}`,
+                          valueFormatter: compactMoney,
+                          tickLabelStyle: { fontSize: 11 },
+                        },
+                      ]}
+                      series={
+                        monthlyView === "total"
+                          ? [
+                              {
+                                data: monthValues,
+                                color: theme.palette.primary.main,
+                                area: true,
+                                showMark: !isSm,
+                                curve: "monotoneX",
+                                valueFormatter: (v) =>
+                                  v == null ? "" : formatMoney(String(v)),
+                                label: "Total billed",
+                              },
+                            ]
+                          : perVendorSeries
+                      }
+                      margin={{ left: 64, right: 24, top: 16, bottom: 32 }}
+                      grid={{ horizontal: true }}
+                      hideLegend={monthlyView === "total"}
+                      slotProps={{
+                        legend: {
+                          direction: "horizontal",
+                          position: { vertical: "bottom", horizontal: "center" },
+                          sx: { fontSize: 12 },
+                        },
+                      }}
+                    />
+                  )}
+                </CardContent>
+              </Card>
+            </Grid>
+
+            <Grid size={{ xs: 12 }}>
+              <Card variant="outlined">
+                <CardHeader
+                  title="Bill volume per month"
+                  subheader={`Number of bills issued — ${RANGE_LABEL[range].toLowerCase()}`}
+                  titleTypographyProps={{ variant: "subtitle1", fontWeight: 600 }}
+                  subheaderTypographyProps={{ variant: "caption" }}
+                />
+                <CardContent sx={{ pt: 0 }}>
+                  {statsLoading ? (
+                    <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
+                      <CircularProgress size={28} aria-label="Loading volume stats" />
+                    </Box>
+                  ) : (
+                    <BarChart
+                      height={chartHeight}
+                      xAxis={[
+                        {
+                          data: monthLabels,
+                          scaleType: "band",
+                          tickLabelStyle: isSm ? { fontSize: 10 } : { fontSize: 12 },
+                        },
+                      ]}
+                      yAxis={[
+                        {
+                          tickLabelStyle: { fontSize: 11 },
+                          valueFormatter: (v: number) => String(Math.round(v)),
                         },
                       ]}
                       series={[
                         {
-                          data: monthValues,
-                          color: theme.palette.primary.main,
-                          area: true,
-                          showMark: !isSm,
-                          curve: "monotoneX",
-                          valueFormatter: (v) => (v == null ? "" : formatMoney(String(v))),
-                          label: "Total billed",
+                          data: monthCounts,
+                          color: theme.palette.secondary.main,
+                          label: "Bills",
+                          valueFormatter: (v) => (v == null ? "" : String(v)),
                         },
                       ]}
-                      margin={{ left: 60, right: 16, top: 16, bottom: 32 }}
+                      borderRadius={4}
+                      margin={{ left: 48, right: 24, top: 16, bottom: 32 }}
+                      grid={{ horizontal: true }}
                       hideLegend
                     />
                   )}

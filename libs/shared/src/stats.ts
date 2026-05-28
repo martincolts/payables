@@ -32,10 +32,18 @@ export const monthlyStatSchema = z.object({
 });
 export type MonthlyStat = z.infer<typeof monthlyStatSchema>;
 
+export const vendorMonthlySeriesSchema = z.object({
+  vendorId: z.string(),
+  vendorName: z.string(),
+  points: z.array(monthlyStatSchema),
+});
+export type VendorMonthlySeries = z.infer<typeof vendorMonthlySeriesSchema>;
+
 export const dashboardStatsSchema = z.object({
   topVendors: z.array(vendorStatSchema),
   byStatus: z.array(statusStatSchema),
   monthly: z.array(monthlyStatSchema),
+  monthlyByVendor: z.array(vendorMonthlySeriesSchema),
 });
 export type DashboardStats = z.infer<typeof dashboardStatsSchema>;
 

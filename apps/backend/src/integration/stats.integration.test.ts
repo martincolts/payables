@@ -29,6 +29,7 @@ describe("stats (integration)", () => {
     const body = await res.json();
     expect(body.topVendors).toEqual([]);
     expect(body.byStatus).toEqual([]);
+    expect(body.monthlyByVendor).toEqual([]);
     // 12 zero-filled months by default.
     expect(body.monthly).toHaveLength(12);
     expect(body.monthly.every((m) => m.billCount === 0 && m.totalAmount === "0")).toBe(true);
@@ -70,6 +71,14 @@ describe("stats (integration)", () => {
     const march = body.monthly.find((m) => m.month === "2026-03");
     expect(march!.billCount).toBe(2);
     expect(march!.totalAmount).toBe("600.00");
+
+    expect(body.monthlyByVendor.map((s) => s.vendorName).sort()).toEqual([
+      "Acme",
+      "Globex",
+    ]);
+    const globexSeries = body.monthlyByVendor.find((s) => s.vendorName === "Globex");
+    const globexMar = globexSeries!.points.find((p) => p.month === "2026-03");
+    expect(globexMar!.totalAmount).toBe("500.00");
 
     await own.cleanup();
   });

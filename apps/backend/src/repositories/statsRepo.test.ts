@@ -77,9 +77,11 @@ describe("statsRepo", () => {
     await testDb.cleanup();
   });
 
+  const EPOCH = new Date(Date.UTC(2000, 0, 1));
+
   describe("topVendorsByAmount", () => {
     it("orders vendors by total amount desc", async () => {
-      const rows = await repo.topVendorsByAmount(orgId);
+      const rows = await repo.topVendorsByAmount(orgId, EPOCH);
       expect(rows.map((r) => r.vendorName)).toEqual(["Globex", "Acme", "Initech"]);
       expect(rows[0]!.totalAmount).toBe("1000.00");
       expect(rows[1]!.totalAmount).toBe("300.00");
@@ -87,20 +89,25 @@ describe("statsRepo", () => {
     });
 
     it("respects the limit", async () => {
-      const rows = await repo.topVendorsByAmount(orgId, 2);
+      const rows = await repo.topVendorsByAmount(orgId, EPOCH, 2);
       expect(rows).toHaveLength(2);
     });
 
     it("scopes to org", async () => {
       const { organizationId: otherOrg } = await seedOrg(testDb.db);
-      const rows = await repo.topVendorsByAmount(otherOrg);
+      const rows = await repo.topVendorsByAmount(otherOrg, EPOCH);
       expect(rows).toEqual([]);
+    });
+
+    it("excludes bills issued before `since`", async () => {
+      const rows = await repo.topVendorsByAmount(orgId, new Date(Date.UTC(2026, 4, 1)));
+      expect(rows.map((r) => r.vendorName)).toEqual(["Initech"]);
     });
   });
 
   describe("countsByStatus", () => {
     it("groups bills by status", async () => {
-      const rows = await repo.countsByStatus(orgId);
+      const rows = await repo.countsByStatus(orgId, EPOCH);
       const byStatus = Object.fromEntries(rows.map((r) => [r.status, r]));
       expect(byStatus.paid!.count).toBe(1);
       expect(byStatus.paid!.totalAmount).toBe("100.00");
@@ -108,6 +115,27 @@ describe("statsRepo", () => {
       expect(byStatus.approved!.totalAmount).toBe("1000.00");
       expect(byStatus.draft!.count).toBe(1);
       expect(byStatus.pending_approval!.count).toBe(1);
+    });
+
+    it("excludes bills issued before `since`", async () => {
+      const rows = await repo.countsByStatus(orgId, new Date(Date.UTC(2026, 4, 1)));
+      expect(rows.map((r) => r.status).sort()).toEqual(["pending_approval"]);
+    });
+  });
+
+  describe("monthlyByVendor", () => {
+    it("returns monthly buckets for the given vendor ids", async () => {
+      const rows = await repo.monthlyByVendor(orgId, EPOCH, [acme.id, globex.id]);
+      const acmeMar = rows.find((r) => r.vendorId === acme.id && r.month === "2026-03");
+      const globexFeb = rows.find((r) => r.vendorId === globex.id && r.month === "2026-02");
+      expect(acmeMar!.totalAmount).toBe("100.00");
+      expect(globexFeb!.totalAmount).toBe("1000.00");
+      expect(rows.find((r) => r.vendorId === initech.id)).toBeUndefined();
+    });
+
+    it("returns [] when no vendor ids are given", async () => {
+      const rows = await repo.monthlyByVendor(orgId, EPOCH, []);
+      expect(rows).toEqual([]);
     });
   });
 
