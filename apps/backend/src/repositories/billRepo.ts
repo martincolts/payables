@@ -177,7 +177,6 @@ export function createBillRepo(db: DbExecutor): BillRepo {
             billId: bill!.id,
             description: li.description,
             amount: li.amount,
-            category: li.category ?? null,
             glAccount: li.glAccount ?? null,
           })),
         );

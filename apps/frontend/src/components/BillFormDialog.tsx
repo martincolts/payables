@@ -31,10 +31,9 @@ interface Props {
 interface LineItemDraft {
   description: string;
   amount: string;
-  category: string;
 }
 
-const emptyLineItem = (): LineItemDraft => ({ description: "", amount: "", category: "" });
+const emptyLineItem = (): LineItemDraft => ({ description: "", amount: "" });
 const today = () => new Date().toISOString().slice(0, 10);
 const isMoney = (s: string) => /^\d+(\.\d{1,2})?$/.test(s);
 
@@ -91,7 +90,6 @@ export function BillFormDialog({ open, onClose }: Props) {
         lineItems: lineItems.map((li) => ({
           description: li.description.trim(),
           amount: li.amount,
-          category: li.category.trim() || null,
         })),
       });
       toast.success("Bill created");
@@ -168,13 +166,6 @@ export function BillFormDialog({ open, onClose }: Props) {
                   required
                   sx={{ flexGrow: 1 }}
                   size="small"
-                />
-                <TextField
-                  label="Category"
-                  value={li.category}
-                  onChange={(e) => updateLineItem(i, { category: e.target.value })}
-                  size="small"
-                  sx={{ width: 140 }}
                 />
                 <TextField
                   label="Amount"

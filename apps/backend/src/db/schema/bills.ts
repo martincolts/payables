@@ -39,6 +39,5 @@ export const billLineItems = pgTable("bill_line_items", {
     .references(() => bills.id, { onDelete: "cascade" }),
   description: text("description").notNull(),
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
-  category: text("category"),
   glAccount: text("gl_account"),
 });

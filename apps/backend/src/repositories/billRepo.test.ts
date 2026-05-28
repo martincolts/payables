@@ -213,7 +213,7 @@ describe("billRepo", () => {
           memo: "Quarterly retainer",
           lineItems: [
             { description: "Design", amount: "30.50" },
-            { description: "Hosting", amount: "19.50", category: "infra" },
+            { description: "Hosting", amount: "19.50" },
           ],
         },
         userId,
@@ -230,7 +230,6 @@ describe("billRepo", () => {
         .from(billLineItems)
         .where(eq(billLineItems.billId, created.id));
       expect(rows).toHaveLength(2);
-      expect(rows.find((r) => r.description === "Hosting")!.category).toBe("infra");
     });
   });
 

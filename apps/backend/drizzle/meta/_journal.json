@@ -15,6 +15,13 @@
       "when": 1779981985824,
       "tag": "0001_living_proteus",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1779996257098,
+      "tag": "0002_fresh_swarm",
+      "breakpoints": true
     }
   ]
 }

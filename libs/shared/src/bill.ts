@@ -7,7 +7,6 @@ export const billLineItemSchema = z.object({
   id: z.uuid(),
   description: z.string().min(1),
   amount: z.string(), // NUMERIC(12,2) serialized as string to preserve precision
-  category: z.string().nullable(),
   glAccount: z.string().nullable(),
 });
 export type BillLineItem = z.infer<typeof billLineItemSchema>;
@@ -44,7 +43,6 @@ export type BillListItem = z.infer<typeof billListItemSchema>;
 export const createBillLineItemSchema = z.object({
   description: z.string().min(1),
   amount: z.string().regex(/^\d+(\.\d{1,2})?$/, "must be a money amount"),
-  category: z.string().nullish(),
   glAccount: z.string().nullish(),
 });
 
