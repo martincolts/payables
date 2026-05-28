@@ -1,4 +1,4 @@
-import type { BillListItem, CreateBillInput, Paginated } from "@payables/shared";
+import type { BillDetail, BillListItem, CreateBillInput, Paginated } from "@payables/shared";
 import type { DB } from "../db/client.js";
 import {
   createBillRepo,
@@ -21,7 +21,7 @@ export function createBillService(db: DB) {
   const vendorRepo = createVendorRepo(db);
 
   return {
-    getById(id: string, organizationId: string): Promise<BillListItem> {
+    getById(id: string, organizationId: string): Promise<BillDetail> {
       return repo.getById(id, organizationId);
     },
 
@@ -40,7 +40,7 @@ export function createBillService(db: DB) {
       input: CreateBillInput,
       createdBy: string,
       organizationId: string,
-    ): Promise<BillListItem> {
+    ): Promise<BillDetail> {
       // Reject bills against unknown or deactivated vendors. getById throws
       // NotFoundError (→ 404) when the vendor doesn't exist.
       const vendor = await vendorRepo.getById(input.vendorId, organizationId);
@@ -71,7 +71,7 @@ export function createBillService(db: DB) {
       id: string,
       organizationId: string,
       userId: string,
-    ): Promise<BillListItem> {
+    ): Promise<BillDetail> {
       const bill = await repo.getById(id, organizationId);
       assertTransition(bill.status, "pending_approval");
       return db.transaction(async (tx) => {
@@ -99,7 +99,7 @@ export function createBillService(db: DB) {
       id: string,
       organizationId: string,
       userId: string,
-    ): Promise<BillListItem> {
+    ): Promise<BillDetail> {
       const bill = await repo.getById(id, organizationId);
       assertTransition(bill.status, "paid");
       return db.transaction(async (tx) => {
@@ -121,7 +121,7 @@ export function createBillService(db: DB) {
       id: string,
       organizationId: string,
       userId: string,
-    ): Promise<BillListItem> {
+    ): Promise<BillDetail> {
       const bill = await repo.getById(id, organizationId);
       assertTransition(bill.status, "payment_failed");
       return db.transaction(async (tx) => {

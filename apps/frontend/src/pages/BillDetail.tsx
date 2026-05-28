@@ -275,6 +275,71 @@ export function BillDetail() {
               )}
             </Grid>
           </Paper>
+
+          <Paper variant="outlined" sx={{ p: 2, mt: 2 }}>
+            <Typography variant="overline" color="text.secondary">
+              Line items
+            </Typography>
+            {b.lineItems.length === 0 ? (
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                No line items recorded.
+              </Typography>
+            ) : (
+              <Stack divider={<Divider flexItem />} sx={{ mt: 1 }}>
+                {b.lineItems.map((li) => (
+                  <Box
+                    key={li.id}
+                    sx={{
+                      display: "flex",
+                      flexDirection: { xs: "column", sm: "row" },
+                      alignItems: { sm: "center" },
+                      justifyContent: "space-between",
+                      gap: { xs: 0.5, sm: 2 },
+                      py: 1,
+                    }}
+                  >
+                    <Box sx={{ minWidth: 0, flex: 1 }}>
+                      <Typography variant="body2" sx={{ wordBreak: "break-word" }}>
+                        {li.description}
+                      </Typography>
+                      {li.glAccount && (
+                        <Typography variant="caption" color="text.secondary">
+                          {li.glAccount}
+                        </Typography>
+                      )}
+                    </Box>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        fontVariantNumeric: "tabular-nums",
+                        fontWeight: 500,
+                        alignSelf: { xs: "flex-end", sm: "center" },
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {formatMoney(li.amount)}
+                    </Typography>
+                  </Box>
+                ))}
+                <Box
+                  sx={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    pt: 1,
+                  }}
+                >
+                  <Typography variant="subtitle2">Total</Typography>
+                  <Typography
+                    variant="subtitle2"
+                    sx={{ fontVariantNumeric: "tabular-nums" }}
+                  >
+                    {formatMoney(b.amount)}
+                  </Typography>
+                </Box>
+              </Stack>
+            )}
+          </Paper>
         </Grid>
 
         <Grid size={{ xs: 12, md: 5 }}>

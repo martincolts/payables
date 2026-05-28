@@ -40,6 +40,12 @@ export const billListItemSchema = billSchema.extend({
 });
 export type BillListItem = z.infer<typeof billListItemSchema>;
 
+/** A single bill with its line items — returned by the detail endpoint. */
+export const billDetailSchema = billListItemSchema.extend({
+  lineItems: z.array(billLineItemSchema),
+});
+export type BillDetail = z.infer<typeof billDetailSchema>;
+
 export const createBillLineItemSchema = z.object({
   description: z.string().min(1),
   amount: z.string().regex(/^\d+(\.\d{1,2})?$/, "must be a money amount"),

@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { loadConfig } from "../config.js";
 import { createDb } from "./client.js";
-import { activityLog, approvals, bills, organizations, users, vendors } from "./schema/index.js";
+import { activityLog, approvals, billLineItems, bills, organizations, users, vendors } from "./schema/index.js";
 import { hashPassword } from "../lib/password.js";
 
 /**
@@ -285,7 +285,96 @@ async function seed() {
     }
   }
 
-  const insertedBills = await db.insert(bills).values(billValues).returning({ id: bills.id, status: bills.status, issueDate: bills.issueDate });
+  const insertedBills = await db
+    .insert(bills)
+    .values(billValues)
+    .returning({
+      id: bills.id,
+      status: bills.status,
+      issueDate: bills.issueDate,
+      vendorId: bills.vendorId,
+      amount: bills.amount,
+      memo: bills.memo,
+    });
+
+  // Per-vendor line-item templates. Each template is a list of (description,
+  // glAccount, weight) tuples; weights are normalized and applied to the bill
+  // total so the line items always sum to the bill amount.
+  type LineTemplate = { description: string; glAccount: string; weight: number };
+  const lineTemplatesByVendor: Record<string, LineTemplate[]> = {
+    "Amazon Web Services": [
+      { description: "EC2 compute (on-demand)", glAccount: "6010-Cloud Infrastructure", weight: 0.45 },
+      { description: "S3 storage", glAccount: "6010-Cloud Infrastructure", weight: 0.12 },
+      { description: "RDS Postgres", glAccount: "6010-Cloud Infrastructure", weight: 0.22 },
+      { description: "CloudFront data transfer", glAccount: "6011-Bandwidth", weight: 0.13 },
+      { description: "Support plan", glAccount: "6012-Cloud Support", weight: 0.08 },
+    ],
+    Stripe: [
+      { description: "Payment processing fees", glAccount: "6210-Payment Processing", weight: 0.82 },
+      { description: "International card fees", glAccount: "6210-Payment Processing", weight: 0.13 },
+      { description: "Radar fraud protection", glAccount: "6211-Fraud Tools", weight: 0.05 },
+    ],
+    Figma: [
+      { description: "Editor seats", glAccount: "6310-Software Subscriptions", weight: 0.9 },
+      { description: "Dev Mode add-on", glAccount: "6310-Software Subscriptions", weight: 0.1 },
+    ],
+    WeWork: [
+      { description: "Office rent — monthly", glAccount: "6410-Rent", weight: 0.85 },
+      { description: "Conference room credits", glAccount: "6411-Facilities", weight: 0.1 },
+      { description: "Mail handling & printing", glAccount: "6411-Facilities", weight: 0.05 },
+    ],
+    Notion: [{ description: "Team plan seats", glAccount: "6310-Software Subscriptions", weight: 1 }],
+  };
+  const oneOffTemplates: LineTemplate[][] = [
+    [
+      { description: "Consulting hours", glAccount: "6510-Professional Services", weight: 0.7 },
+      { description: "Travel reimbursement", glAccount: "6610-Travel", weight: 0.3 },
+    ],
+    [
+      { description: "Laptop hardware", glAccount: "6710-Hardware", weight: 0.8 },
+      { description: "Peripherals & accessories", glAccount: "6710-Hardware", weight: 0.2 },
+    ],
+    [{ description: "Team offsite catering", glAccount: "6810-Meals & Entertainment", weight: 1 }],
+    [
+      { description: "Conference registration", glAccount: "6910-Conferences", weight: 0.6 },
+      { description: "Lodging", glAccount: "6610-Travel", weight: 0.4 },
+    ],
+  ];
+
+  const vendorNameById = new Map(vendorRows.map((v) => [v.id, v.name] as const));
+  const lineItemValues: (typeof billLineItems.$inferInsert)[] = [];
+
+  for (const bill of insertedBills) {
+    const vendorName = vendorNameById.get(bill.vendorId);
+    const isOneOff = bill.memo === "One-off expense";
+    const template = isOneOff
+      ? oneOffTemplates[Math.floor(rand() * oneOffTemplates.length)]!
+      : vendorName
+      ? lineTemplatesByVendor[vendorName]
+      : undefined;
+    if (!template || template.length === 0) continue;
+
+    const totalCents = Math.round(Number(bill.amount) * 100);
+    const totalWeight = template.reduce((sum, t) => sum + t.weight, 0);
+
+    let allocated = 0;
+    for (let i = 0; i < template.length; i++) {
+      const t = template[i]!;
+      // Last line absorbs any rounding remainder so the sum matches exactly.
+      const cents =
+        i === template.length - 1
+          ? totalCents - allocated
+          : Math.round((totalCents * t.weight) / totalWeight);
+      allocated += cents;
+      if (cents <= 0) continue;
+      lineItemValues.push({
+        billId: bill.id,
+        description: t.description,
+        amount: (cents / 100).toFixed(2),
+        glAccount: t.glAccount,
+      });
+    }
+  }
 
   // Paid bills must have gone through the 2-approver quorum — backfill matching
   // approval rows so the audit trail is consistent with the bill's status.
@@ -402,6 +491,9 @@ async function seed() {
       });
     }
   }
+  if (lineItemValues.length > 0) {
+    await db.insert(billLineItems).values(lineItemValues);
+  }
   if (approvalValues.length > 0) {
     await db.insert(approvals).values(approvalValues);
   }
@@ -410,7 +502,7 @@ async function seed() {
   }
 
   console.log(
-    `Seed complete: inserted ${billValues.length} bills, ${approvalValues.length} approvals, and ${activityValues.length} activity log entries across 24 months.`,
+    `Seed complete: inserted ${billValues.length} bills, ${lineItemValues.length} line items, ${approvalValues.length} approvals, and ${activityValues.length} activity log entries across 24 months.`,
   );
   await pool.end();
 }

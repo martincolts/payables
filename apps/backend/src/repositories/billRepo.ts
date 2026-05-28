@@ -2,6 +2,8 @@ import { and, asc, desc, eq, gte, ilike, inArray, lt, lte, ne, or, sql, type SQL
 import type {
   ApprovalStatus,
   BillApprover,
+  BillDetail,
+  BillLineItem,
   BillListItem,
   BillStatus,
   CreateBillInput,
@@ -18,7 +20,7 @@ export type ListBillsParams = ListBillsQuery &
 /** Consumer-side interface: the slice of bill persistence services depend on. */
 export type BillRepo = {
   list(params: ListBillsParams): Promise<{ items: BillListItem[]; total: number }>;
-  getById(id: string, organizationId: string): Promise<BillListItem>;
+  getById(id: string, organizationId: string): Promise<BillDetail>;
   /**
    * Inserts a bill and its line items in one transaction. The bill's total
    * `amount` is the sum of its line items. Returns the enriched list item.
@@ -27,13 +29,13 @@ export type BillRepo = {
     input: CreateBillInput,
     createdBy: string,
     organizationId: string,
-  ): Promise<BillListItem>;
+  ): Promise<BillDetail>;
   /** Sets a bill's status. Throws if the bill is unknown in the org. */
   updateStatus(
     id: string,
     organizationId: string,
     status: BillStatus,
-  ): Promise<BillListItem>;
+  ): Promise<BillDetail>;
   /** Hard-deletes a bill; line items cascade. Throws if the bill is unknown. */
   delete(id: string, organizationId: string): Promise<void>;
 };
@@ -150,8 +152,28 @@ export function createBillRepo(db: DbExecutor): BillRepo {
         .where(and(eq(bills.id, id), eq(bills.organizationId, organizationId)))
         .limit(1);
       if (!row) throw new NotFoundError("Bill", id);
-      const approversByBill = await loadApproversByBill(db, [row.bill.id]);
-      return toBillListItem(row.bill, row.vendorName, approversByBill.get(row.bill.id) ?? []);
+      const [approversByBill, lineItemRows] = await Promise.all([
+        loadApproversByBill(db, [row.bill.id]),
+        db
+          .select({
+            id: billLineItems.id,
+            description: billLineItems.description,
+            amount: billLineItems.amount,
+            glAccount: billLineItems.glAccount,
+          })
+          .from(billLineItems)
+          .where(eq(billLineItems.billId, row.bill.id)),
+      ]);
+      const lineItems: BillLineItem[] = lineItemRows.map((li) => ({
+        id: li.id,
+        description: li.description,
+        amount: li.amount,
+        glAccount: li.glAccount,
+      }));
+      return {
+        ...toBillListItem(row.bill, row.vendorName, approversByBill.get(row.bill.id) ?? []),
+        lineItems,
+      };
     },
 
     async create(input, createdBy, organizationId) {
