@@ -119,6 +119,63 @@ function OutstandingBreakdown({
   );
 }
 
+function CountBreakdown({
+  rows,
+}: {
+  rows: { key: string; label: string; count: number; color: string; to: string; emphasize?: boolean }[];
+}) {
+  if (rows.length === 0) return null;
+  return (
+    <Stack spacing={0.5} sx={{ mt: 1.5 }}>
+      {rows.map((r) => (
+        <Box
+          key={r.key}
+          component={Link}
+          to={r.to}
+          onClick={(e) => e.stopPropagation()}
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 1,
+            textDecoration: "none",
+            color: "inherit",
+            borderRadius: 0.5,
+            px: 0.5,
+            mx: -0.5,
+            "&:hover": { backgroundColor: "action.hover" },
+          }}
+        >
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
+            <Box
+              sx={{
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                backgroundColor: r.color,
+                flexShrink: 0,
+              }}
+            />
+            <Typography variant="caption" color="text.secondary" noWrap>
+              {r.label}
+            </Typography>
+          </Box>
+          <Typography
+            variant="caption"
+            sx={{
+              fontVariantNumeric: "tabular-nums",
+              fontWeight: r.emphasize && r.count > 0 ? 700 : 500,
+              color: r.emphasize && r.count > 0 ? "error.main" : "text.primary",
+            }}
+          >
+            {r.count}
+          </Typography>
+        </Box>
+      ))}
+    </Stack>
+  );
+}
+
 function windowToDateRange(w: StatsWindow): { issueAfter: string; issueBefore: string } {
   const [ty, tm] = w.to.split("-").map(Number);
   const issueAfter = `${w.from}-01`;
@@ -395,8 +452,45 @@ export function Dashboard() {
   const pendingCount = summary?.pendingApprovalCount ?? 0;
   const paidCount = stats?.byStatus.find((s) => s.status === "paid")?.count ?? 0;
   const failedCount = stats?.byStatus.find((s) => s.status === "payment_failed")?.count ?? 0;
+  const totalBillsCount = (stats?.byStatus ?? []).reduce((acc, s) => acc + s.count, 0);
   const dateRange = windowToDateRange(window);
   const navigate = useNavigate();
+  const countByStatus = useMemo(() => {
+    const m = new Map<BillStatus, number>();
+    for (const s of stats?.byStatus ?? []) m.set(s.status, s.count);
+    return m;
+  }, [stats]);
+
+  const billCountRows = useMemo(() => {
+    const rows: {
+      key: string;
+      label: string;
+      count: number;
+      color: string;
+      to: string;
+      emphasize?: boolean;
+    }[] = [
+      {
+        key: "overdue",
+        label: "Overdue",
+        count: overdueCount,
+        color: theme.palette.error.main,
+        to: billsHref({ overdue: "true", ...dateRange }),
+        emphasize: true,
+      },
+    ];
+    for (const s of billStatuses) {
+      rows.push({
+        key: s,
+        label: STATUS_LABELS[s],
+        count: countByStatus.get(s) ?? 0,
+        color: statusColor(theme, s),
+        to: billsHref({ status: s, ...dateRange }),
+        emphasize: s === "payment_failed",
+      });
+    }
+    return rows;
+  }, [overdueCount, countByStatus, theme, dateRange]);
 
   const vendorBars = useMemo(() => {
     const items = [...(stats?.topVendors ?? [])].reverse();
@@ -599,40 +693,15 @@ export function Dashboard() {
       ) : (
         <>
           <Grid container spacing={2} sx={{ mb: 3 }}>
-            <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
+            <Grid size={{ xs: 12, sm: 6 }}>
               <MetricCard label="Total outstanding" value={formatMoney(outstanding)}>
                 <OutstandingBreakdown rows={outstandingBreakdown.rows} />
               </MetricCard>
             </Grid>
-            <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
-              <MetricCard
-                label="Overdue"
-                value={String(overdueCount)}
-                color={overdueCount > 0 ? "error.main" : undefined}
-                to={billsHref({ overdue: "true", ...dateRange })}
-              />
-            </Grid>
-            <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
-              <MetricCard
-                label="Pending approval"
-                value={String(pendingCount)}
-                to={billsHref({ status: "pending_approval", ...dateRange })}
-              />
-            </Grid>
-            <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
-              <MetricCard
-                label="Paid"
-                value={String(paidCount)}
-                to={billsHref({ status: "paid", ...dateRange })}
-              />
-            </Grid>
-            <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
-              <MetricCard
-                label="Payment failed"
-                value={String(failedCount)}
-                color={failedCount > 0 ? "error.main" : undefined}
-                to={billsHref({ status: "payment_failed", ...dateRange })}
-              />
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <MetricCard label="Bills" value={String(totalBillsCount)}>
+                <CountBreakdown rows={billCountRows} />
+              </MetricCard>
             </Grid>
           </Grid>
 
