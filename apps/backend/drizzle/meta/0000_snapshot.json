@@ -1,5 +1,5 @@
 {
-  "id": "33d8e1b0-d520-430f-aa29-9d7ac6f56028",
+  "id": "9526c92c-8f19-4947-acf6-0af9a7c6bb09",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -387,12 +387,6 @@
           "type": "numeric(12, 2)",
           "primaryKey": false,
           "notNull": true
-        },
-        "category": {
-          "name": "category",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         },
         "gl_account": {
           "name": "gl_account",
@@ -871,6 +865,8 @@
         "bill_approved",
         "bill_rejected",
         "bill_deleted",
+        "bill_paid",
+        "bill_payment_failed",
         "vendor_created",
         "vendor_deactivated"
       ]
@@ -892,7 +888,8 @@
         "approved",
         "rejected",
         "scheduled",
-        "paid"
+        "paid",
+        "payment_failed"
       ]
     },
     "public.invitation_status": {

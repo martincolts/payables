@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { loadConfig } from "../config.js";
 import { createDb } from "./client.js";
-import { approvals, bills, organizations, users, vendors } from "./schema/index.js";
+import { activityLog, approvals, bills, organizations, users, vendors } from "./schema/index.js";
 import { hashPassword } from "../lib/password.js";
 
 /**
@@ -290,19 +290,60 @@ async function seed() {
   // Paid bills must have gone through the 2-approver quorum — backfill matching
   // approval rows so the audit trail is consistent with the bill's status.
   const approvalValues: (typeof approvals.$inferInsert)[] = [];
+  // Mirror the activity-log writes the services would have produced for each
+  // lifecycle event, so the audit trail reflects how each bill got to its
+  // current state. Timestamps are staggered off the issue date.
+  const activityValues: (typeof activityLog.$inferInsert)[] = [];
+  const addHours = (d: Date, h: number) => {
+    const out = new Date(d);
+    out.setUTCHours(out.getUTCHours() + h);
+    return out;
+  };
+
+  // Vendor creation entries — one per seeded vendor, attributed to the admin.
+  for (const v of vendorRows) {
+    activityValues.push({
+      organizationId: orgId,
+      userId: admin.id,
+      action: "vendor_created",
+      entityType: "vendor",
+      entityId: v.id,
+      metadata: { name: v.name, paymentMethod: v.paymentMethod },
+      createdAt: v.createdAt,
+    });
+  }
+
   for (const bill of insertedBills) {
-    const resolvedAt = new Date(`${bill.issueDate}T12:00:00Z`);
+    const issuedAt = new Date(`${bill.issueDate}T09:00:00Z`);
     const offset = Math.floor(rand() * approverRows.length);
-    if (bill.status === "paid" || bill.status === "approved" || bill.status === "scheduled") {
-      // Reached quorum — record 2 distinct approvers signing off.
-      const first = approverRows[offset % approverRows.length]!;
-      const second = approverRows[(offset + 1) % approverRows.length]!;
-      approvalValues.push(
-        { billId: bill.id, approverId: first.id, status: "approved", resolvedAt },
-        { billId: bill.id, approverId: second.id, status: "approved", resolvedAt },
-      );
-    } else if (bill.status === "rejected") {
-      // A single rejection is enough to block the bill — record who rejected it.
+
+    // Every bill was created by the admin on its issue date.
+    activityValues.push({
+      organizationId: orgId,
+      userId: admin.id,
+      action: "bill_created",
+      entityType: "bill",
+      entityId: bill.id,
+      createdAt: issuedAt,
+    });
+
+    if (bill.status === "draft") continue;
+
+    // Anything past draft was submitted for approval shortly after creation.
+    const submittedAt = addHours(issuedAt, 2);
+    activityValues.push({
+      organizationId: orgId,
+      userId: admin.id,
+      action: "bill_submitted",
+      entityType: "bill",
+      entityId: bill.id,
+      createdAt: submittedAt,
+    });
+
+    if (bill.status === "pending_approval") continue;
+
+    const resolvedAt = addHours(issuedAt, 6);
+    if (bill.status === "rejected") {
       const rejecter = approverRows[offset % approverRows.length]!;
       approvalValues.push({
         billId: bill.id,
@@ -311,14 +352,65 @@ async function seed() {
         comment: "Rejected — please review and resubmit.",
         resolvedAt,
       });
+      activityValues.push({
+        organizationId: orgId,
+        userId: rejecter.id,
+        action: "bill_rejected",
+        entityType: "bill",
+        entityId: bill.id,
+        metadata: { comment: "Rejected — please review and resubmit." },
+        createdAt: resolvedAt,
+      });
+      continue;
+    }
+
+    // approved / scheduled / paid all cleared the 2-approver quorum.
+    const first = approverRows[offset % approverRows.length]!;
+    const second = approverRows[(offset + 1) % approverRows.length]!;
+    approvalValues.push(
+      { billId: bill.id, approverId: first.id, status: "approved", resolvedAt },
+      { billId: bill.id, approverId: second.id, status: "approved", resolvedAt },
+    );
+    activityValues.push(
+      {
+        organizationId: orgId,
+        userId: first.id,
+        action: "bill_approved",
+        entityType: "bill",
+        entityId: bill.id,
+        createdAt: resolvedAt,
+      },
+      {
+        organizationId: orgId,
+        userId: second.id,
+        action: "bill_approved",
+        entityType: "bill",
+        entityId: bill.id,
+        createdAt: addHours(resolvedAt, 1),
+      },
+    );
+
+    if (bill.status === "paid") {
+      activityValues.push({
+        organizationId: orgId,
+        userId: admin.id,
+        action: "bill_paid",
+        entityType: "bill",
+        entityId: bill.id,
+        metadata: { simulated: true },
+        createdAt: addHours(resolvedAt, 24),
+      });
     }
   }
   if (approvalValues.length > 0) {
     await db.insert(approvals).values(approvalValues);
   }
+  if (activityValues.length > 0) {
+    await db.insert(activityLog).values(activityValues);
+  }
 
   console.log(
-    `Seed complete: inserted ${billValues.length} bills and ${approvalValues.length} approvals across 24 months.`,
+    `Seed complete: inserted ${billValues.length} bills, ${approvalValues.length} approvals, and ${activityValues.length} activity log entries across 24 months.`,
   );
   await pool.end();
 }

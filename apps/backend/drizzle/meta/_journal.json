@@ -5,22 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1779934498926,
-      "tag": "0000_hard_monster_badoon",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1779981985824,
-      "tag": "0001_living_proteus",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1779996257098,
-      "tag": "0002_fresh_swarm",
+      "when": 1779996768797,
+      "tag": "0000_massive_wiccan",
       "breakpoints": true
     }
   ]

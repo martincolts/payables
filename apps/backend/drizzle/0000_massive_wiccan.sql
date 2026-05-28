@@ -1,6 +1,6 @@
-CREATE TYPE "public"."activity_action" AS ENUM('bill_created', 'bill_submitted', 'bill_approved', 'bill_rejected', 'bill_deleted', 'vendor_created', 'vendor_deactivated');--> statement-breakpoint
+CREATE TYPE "public"."activity_action" AS ENUM('bill_created', 'bill_submitted', 'bill_approved', 'bill_rejected', 'bill_deleted', 'bill_paid', 'bill_payment_failed', 'vendor_created', 'vendor_deactivated');--> statement-breakpoint
 CREATE TYPE "public"."activity_entity_type" AS ENUM('bill', 'vendor');--> statement-breakpoint
-CREATE TYPE "public"."bill_status" AS ENUM('draft', 'pending_approval', 'approved', 'rejected', 'scheduled', 'paid');--> statement-breakpoint
+CREATE TYPE "public"."bill_status" AS ENUM('draft', 'pending_approval', 'approved', 'rejected', 'scheduled', 'paid', 'payment_failed');--> statement-breakpoint
 CREATE TYPE "public"."invitation_status" AS ENUM('pending', 'accepted');--> statement-breakpoint
 CREATE TYPE "public"."payment_method" AS ENUM('ach', 'wire', 'check');--> statement-breakpoint
 CREATE TYPE "public"."user_status" AS ENUM('pending', 'active');--> statement-breakpoint
@@ -53,7 +53,6 @@ CREATE TABLE "bill_line_items" (
 	"bill_id" uuid NOT NULL,
 	"description" text NOT NULL,
 	"amount" numeric(12, 2) NOT NULL,
-	"category" text,
 	"gl_account" text
 );
 --> statement-breakpoint
