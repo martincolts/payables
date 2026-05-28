@@ -1,5 +1,7 @@
-import type { Theme } from "@mui/material";
+import { alpha, type Theme } from "@mui/material";
 import type { BillStatus } from "@payables/shared";
+
+const CHART_ALPHA = 0.65;
 
 export const STATUS_LABELS: Record<BillStatus, string> = {
   draft: "Draft",
@@ -12,22 +14,25 @@ export const STATUS_LABELS: Record<BillStatus, string> = {
 };
 
 export function statusColor(theme: Theme, status: BillStatus): string {
-  switch (status) {
-    case "draft":
-      return theme.palette.grey[500];
-    case "pending_approval":
-      return theme.palette.warning.main;
-    case "approved":
-      return theme.palette.info.main;
-    case "rejected":
-      return theme.palette.error.main;
-    case "scheduled":
-      return theme.palette.secondary.main;
-    case "paid":
-      return theme.palette.success.main;
-    case "payment_failed":
-      return theme.palette.error.main;
-  }
+  const base = (() => {
+    switch (status) {
+      case "draft":
+        return theme.palette.grey[500];
+      case "pending_approval":
+        return theme.palette.warning.main;
+      case "approved":
+        return theme.palette.info.main;
+      case "rejected":
+        return theme.palette.error.main;
+      case "scheduled":
+        return theme.palette.secondary.main;
+      case "paid":
+        return theme.palette.success.main;
+      case "payment_failed":
+        return theme.palette.error.main;
+    }
+  })();
+  return alpha(base, CHART_ALPHA);
 }
 
 export function formatMonthLabel(month: string): string {
@@ -48,7 +53,7 @@ export function compactMoney(v: number): string {
   return `$${v}`;
 }
 
-export const CHART_PRIMARY = "#3b82f6";
+export const CHART_PRIMARY = alpha("#3b82f6", CHART_ALPHA);
 
 export const VENDOR_PALETTE = [
   "#3b82f6",
@@ -57,4 +62,4 @@ export const VENDOR_PALETTE = [
   "#f59e0b",
   "#06b6d4",
   "#ec4899",
-];
+].map((c) => alpha(c, CHART_ALPHA));

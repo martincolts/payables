@@ -360,8 +360,11 @@ export function Dashboard() {
     const d = defaultStatsWindow();
     return { from: d.from, to: d.to };
   });
-  const [selectedStatuses, setSelectedStatuses] = useState<BillStatus[]>([]);
+  const [selectedStatuses, setSelectedStatuses] = useState<BillStatus[]>(() => [
+    ...billStatuses,
+  ]);
   const hasStatusFilter = selectedStatuses.length > 0;
+  const selectedSet = useMemo(() => new Set(selectedStatuses), [selectedStatuses]);
   const { data: stats, isLoading: statsLoading, isError: statsError } =
     useDashboardStats(window, selectedStatuses);
 
@@ -380,10 +383,8 @@ export function Dashboard() {
 
   const outstandingBreakdown = useMemo(() => {
     const all = stats?.byStatus ?? [];
-    const filtered = hasStatusFilter
-      ? all.filter((s) => selectedStatuses.includes(s.status))
-      : all;
-    const rows = filtered
+    const rows = all
+      .filter((s) => selectedSet.has(s.status))
       .map((s) => ({
         status: s.status,
         amount: Number(s.totalAmount),
@@ -393,9 +394,11 @@ export function Dashboard() {
       .sort((a, b) => b.amount - a.amount);
     const total = rows.reduce((acc, r) => acc + r.amount, 0);
     return { rows, total };
-  }, [stats, hasStatusFilter, selectedStatuses, theme]);
+  }, [stats, selectedSet, theme]);
   const outstanding = String(outstandingBreakdown.total);
-  const totalBillsCount = (stats?.byStatus ?? []).reduce((acc, s) => acc + s.count, 0);
+  const totalBillsCount = (stats?.byStatus ?? [])
+    .filter((s) => selectedSet.has(s.status))
+    .reduce((acc, s) => acc + s.count, 0);
   const dateRange = windowToDateRange(window);
   const countByStatus = useMemo(() => {
     const m = new Map<BillStatus, number>();
@@ -411,17 +414,19 @@ export function Dashboard() {
       color: string;
       to: string;
       emphasize?: boolean;
-    }[] = [
-      {
+    }[] = [];
+    if (hasStatusFilter) {
+      rows.push({
         key: "overdue",
         label: "Overdue",
         count: overdueCount,
         color: theme.palette.error.main,
         to: billsHref({ overdue: "true", ...dateRange }),
         emphasize: true,
-      },
-    ];
+      });
+    }
     for (const s of billStatuses) {
+      if (!selectedSet.has(s)) continue;
       rows.push({
         key: s,
         label: STATUS_LABELS[s],
@@ -432,7 +437,7 @@ export function Dashboard() {
       });
     }
     return rows;
-  }, [overdueCount, countByStatus, theme, dateRange]);
+  }, [overdueCount, countByStatus, theme, dateRange, hasStatusFilter, selectedSet]);
 
   const vendorBars = useMemo(() => {
     const items = [...(stats?.topVendors ?? [])].reverse();
@@ -592,14 +597,14 @@ export function Dashboard() {
             />
           );
         })}
-        {hasStatusFilter && (
-          <Chip
-            label="Clear"
-            size="small"
-            variant="outlined"
-            onClick={() => setSelectedStatuses([])}
-          />
-        )}
+        <Chip
+          label={hasStatusFilter ? "Clear" : "Select all"}
+          size="small"
+          variant="outlined"
+          onClick={() =>
+            setSelectedStatuses(hasStatusFilter ? [] : [...billStatuses])
+          }
+        />
       </Stack>
 
       {statsLoading && !stats ? (
