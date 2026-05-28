@@ -53,13 +53,15 @@ describe("approvals (integration)", () => {
     expect(bill.status).toBe("pending_approval");
   });
 
-  it("forbids a non-approver (admin) from voting", async () => {
+  it("allows an admin to record a decision", async () => {
+    await setQuorum(1);
     const bill = await pendingBill();
     const res = await app.client.api.bills[":id"].approvals.$post(
       { param: { id: bill.id }, json: { decision: "approve" } },
       authHeaders(admin),
     );
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(201);
+    expect(await billStatus(bill.id, admin)).toBe("approved");
   });
 
   it("with quorum 1, a single approval approves the bill", async () => {

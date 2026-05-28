@@ -34,12 +34,12 @@ interface Props {
  */
 export function BillApprovalsDialog({ bill, onClose }: Props) {
   const { user } = useAuth();
-  const isApprover = user?.role === "approver";
+  const canRecordDecision = user?.role === "approver" || user?.role === "admin";
   const summary = useApprovals(bill?.id ?? null);
   const submit = useSubmitApproval(bill?.id ?? "");
   const [comment, setComment] = useState("");
 
-  const canVote = isApprover && bill?.status === "pending_approval";
+  const canVote = canRecordDecision && bill?.status === "pending_approval";
 
   async function decide(decision: "approve" | "reject") {
     if (decision === "reject" && comment.trim().length === 0) {
@@ -50,6 +50,7 @@ export function BillApprovalsDialog({ bill, onClose }: Props) {
       await submit.mutateAsync({ decision, comment: comment.trim() || null });
       toast.success(decision === "approve" ? "Approval recorded" : "Bill rejected");
       setComment("");
+      onClose();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't record decision");
     }
@@ -127,7 +128,7 @@ export function BillApprovalsDialog({ bill, onClose }: Props) {
             ) : bill?.status !== "pending_approval" ? (
               <Alert severity="info">This bill is no longer awaiting approval.</Alert>
             ) : (
-              <Alert severity="info">Only approvers can record a decision.</Alert>
+              <Alert severity="info">You don't have permission to record a decision.</Alert>
             )}
           </Stack>
         ) : (

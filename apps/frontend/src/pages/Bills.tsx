@@ -7,6 +7,7 @@ import {
   IconButton,
   InputLabel,
   MenuItem,
+  Chip,
   Paper,
   Select,
   Stack,
@@ -28,6 +29,7 @@ import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
 import { toast } from "react-toastify";
 import { billStatuses, type BillListItem, type BillStatus } from "@payables/shared";
 import { useBills, useDeleteBill } from "../queries/useBills";
+import { useVendors } from "../queries/useVendors";
 import { useSubmitBill } from "../queries/useApprovals";
 import { useAuth } from "../auth/AuthContext";
 import { StatusChip } from "../components/StatusChip";
@@ -52,6 +54,10 @@ export function Bills() {
   const [pageSize, setPageSize] = useState(10);
   const [status, setStatus] = useState<BillStatus | "">("");
   const [search, setSearch] = useState("");
+  const [vendorId, setVendorId] = useState("");
+  const [dueAfter, setDueAfter] = useState("");
+  const [dueBefore, setDueBefore] = useState("");
+  const { data: vendorsData } = useVendors(1, 100);
   const [formOpen, setFormOpen] = useState(false);
   const [toDelete, setToDelete] = useState<BillListItem | null>(null);
   const [reviewing, setReviewing] = useState<BillListItem | null>(null);
@@ -72,6 +78,9 @@ export function Bills() {
     pageSize,
     status: status || undefined,
     search: search || undefined,
+    vendorId: vendorId || undefined,
+    dueAfter: dueAfter || undefined,
+    dueBefore: dueBefore || undefined,
   });
 
   async function handleDelete() {
@@ -109,7 +118,11 @@ export function Bills() {
         )}
       </Stack>
 
-      <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ mb: 2 }}>
+      <Stack
+        direction={{ xs: "column", sm: "row" }}
+        spacing={2}
+        sx={{ mb: 2, flexWrap: "wrap" }}
+      >
         <TextField
           label="Search by vendor or invoice number"
           value={search}
@@ -118,9 +131,9 @@ export function Bills() {
             setPage(0);
           }}
           size="small"
-          sx={{ flexGrow: 1 }}
+          sx={{ flexGrow: 1, minWidth: 220 }}
         />
-        <FormControl size="small" sx={{ minWidth: 220 }}>
+        <FormControl size="small" sx={{ minWidth: 200 }}>
           <InputLabel id="status-filter-label">Status</InputLabel>
           <Select
             labelId="status-filter-label"
@@ -139,6 +152,49 @@ export function Bills() {
             ))}
           </Select>
         </FormControl>
+        <FormControl size="small" sx={{ minWidth: 200 }}>
+          <InputLabel id="vendor-filter-label">Vendor</InputLabel>
+          <Select
+            labelId="vendor-filter-label"
+            label="Vendor"
+            value={vendorId}
+            onChange={(e) => {
+              setVendorId(e.target.value);
+              setPage(0);
+            }}
+          >
+            <MenuItem value="">All</MenuItem>
+            {vendorsData?.items.map((v) => (
+              <MenuItem key={v.id} value={v.id}>
+                {v.name}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        <TextField
+          label="Due from"
+          type="date"
+          size="small"
+          value={dueAfter}
+          onChange={(e) => {
+            setDueAfter(e.target.value);
+            setPage(0);
+          }}
+          slotProps={{ inputLabel: { shrink: true } }}
+          sx={{ minWidth: 160 }}
+        />
+        <TextField
+          label="Due to"
+          type="date"
+          size="small"
+          value={dueBefore}
+          onChange={(e) => {
+            setDueBefore(e.target.value);
+            setPage(0);
+          }}
+          slotProps={{ inputLabel: { shrink: true } }}
+          sx={{ minWidth: 160 }}
+        />
       </Stack>
 
       {isLoading ? (
@@ -154,6 +210,7 @@ export function Bills() {
                 <TableCell>Status</TableCell>
                 <TableCell align="right">Amount</TableCell>
                 <TableCell>Due date</TableCell>
+                <TableCell>Approvals</TableCell>
                 <TableCell align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
@@ -185,6 +242,25 @@ export function Bills() {
                         {formatDate(bill.dueDate)}
                         {overdue && " · Overdue"}
                       </Typography>
+                    </TableCell>
+                    <TableCell>
+                      {bill.approvers.length > 0 ? (
+                        <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", rowGap: 0.5 }}>
+                          {bill.approvers.map((a, i) => (
+                            <Chip
+                              key={`${a.name}-${i}`}
+                              size="small"
+                              label={a.name}
+                              color={a.status === "approved" ? "success" : "error"}
+                              variant={a.status === "approved" ? "filled" : "outlined"}
+                            />
+                          ))}
+                        </Stack>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary">
+                          —
+                        </Typography>
+                      )}
                     </TableCell>
                     <TableCell align="right">
                       <Stack direction="row" spacing={0.5} sx={{ justifyContent: "flex-end" }}>

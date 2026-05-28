@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { billStatusSchema } from "./enums.js";
+import { approvalStatusSchema, billStatusSchema } from "./enums.js";
 
 const isoDate = z.iso.date(); // "YYYY-MM-DD"
 
@@ -27,9 +27,17 @@ export const billSchema = z.object({
 });
 export type Bill = z.infer<typeof billSchema>;
 
-/** A bill enriched with its vendor's name, as returned by the list endpoint. */
+/** Compact approver info inlined on each list item for at-a-glance display. */
+export const billApproverSchema = z.object({
+  name: z.string(),
+  status: approvalStatusSchema,
+});
+export type BillApprover = z.infer<typeof billApproverSchema>;
+
+/** A bill enriched with its vendor's name and recorded approver decisions. */
 export const billListItemSchema = billSchema.extend({
   vendorName: z.string(),
+  approvers: z.array(billApproverSchema),
 });
 export type BillListItem = z.infer<typeof billListItemSchema>;
 

@@ -1,5 +1,7 @@
-import { and, asc, desc, eq, gte, ilike, lte, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, lte, or, sql, type SQL } from "drizzle-orm";
 import type {
+  ApprovalStatus,
+  BillApprover,
   BillListItem,
   BillStatus,
   CreateBillInput,
@@ -7,7 +9,7 @@ import type {
   PaginationQuery,
 } from "@payables/shared";
 import type { DbExecutor } from "../db/client.js";
-import { billLineItems, bills, vendors } from "../db/schema/index.js";
+import { approvals, billLineItems, bills, users, vendors } from "../db/schema/index.js";
 import { NotFoundError } from "../types/errors.js";
 
 export type ListBillsParams = ListBillsQuery &
@@ -44,7 +46,11 @@ function sumAmounts(amounts: readonly string[]): string {
 
 type BillRow = typeof bills.$inferSelect;
 
-function toBillListItem(row: BillRow, vendorName: string): BillListItem {
+function toBillListItem(
+  row: BillRow,
+  vendorName: string,
+  approvers: BillApprover[],
+): BillListItem {
   return {
     id: row.id,
     vendorId: row.vendorId,
@@ -58,7 +64,29 @@ function toBillListItem(row: BillRow, vendorName: string): BillListItem {
     createdBy: row.createdBy,
     createdAt: row.createdAt.toISOString(),
     vendorName,
+    approvers,
   };
+}
+
+/** Loads approver name + decision per bill, grouped by bill id. */
+async function loadApproversByBill(
+  db: DbExecutor,
+  billIds: readonly string[],
+): Promise<Map<string, BillApprover[]>> {
+  const grouped = new Map<string, BillApprover[]>();
+  if (billIds.length === 0) return grouped;
+  const rows = await db
+    .select({ billId: approvals.billId, name: users.name, status: approvals.status })
+    .from(approvals)
+    .innerJoin(users, eq(approvals.approverId, users.id))
+    .where(inArray(approvals.billId, billIds as string[]))
+    .orderBy(asc(approvals.createdAt));
+  for (const r of rows) {
+    const list = grouped.get(r.billId) ?? [];
+    list.push({ name: r.name, status: r.status as ApprovalStatus });
+    grouped.set(r.billId, list);
+  }
+  return grouped;
 }
 
 export function createBillRepo(db: DbExecutor): BillRepo {
@@ -85,7 +113,7 @@ export function createBillRepo(db: DbExecutor): BillRepo {
           .from(bills)
           .innerJoin(vendors, eq(bills.vendorId, vendors.id))
           .where(where)
-          .orderBy(asc(bills.dueDate), desc(bills.createdAt))
+          .orderBy(desc(bills.createdAt))
           .limit(pageSize)
           .offset(offset),
         db
@@ -95,8 +123,15 @@ export function createBillRepo(db: DbExecutor): BillRepo {
           .where(where),
       ]);
 
+      const approversByBill = await loadApproversByBill(
+        db,
+        rows.map((r) => r.bill.id),
+      );
+
       return {
-        items: rows.map((r) => toBillListItem(r.bill, r.vendorName)),
+        items: rows.map((r) =>
+          toBillListItem(r.bill, r.vendorName, approversByBill.get(r.bill.id) ?? []),
+        ),
         total: count,
       };
     },
@@ -109,7 +144,8 @@ export function createBillRepo(db: DbExecutor): BillRepo {
         .where(and(eq(bills.id, id), eq(bills.organizationId, organizationId)))
         .limit(1);
       if (!row) throw new NotFoundError("Bill", id);
-      return toBillListItem(row.bill, row.vendorName);
+      const approversByBill = await loadApproversByBill(db, [row.bill.id]);
+      return toBillListItem(row.bill, row.vendorName, approversByBill.get(row.bill.id) ?? []);
     },
 
     async create(input, createdBy, organizationId) {

@@ -50,11 +50,13 @@ export const requireAdmin = createMiddleware<AuthEnv>(async (c, next) => {
 });
 
 /**
- * Gate that allows only `approver` users through — for the decision endpoints.
- * Must run after {@link authMiddleware}.
+ * Gate for the decision endpoints. Admins can approve in addition to approvers;
+ * approvers cannot submit drafts (that stays admin-only). Must run after
+ * {@link authMiddleware}.
  */
 export const requireApprover = createMiddleware<AuthEnv>(async (c, next) => {
-  if (c.get("user").role !== "approver") {
+  const role = c.get("user").role;
+  if (role !== "approver" && role !== "admin") {
     throw new HTTPException(403, { message: "Approver role required" });
   }
   await next();

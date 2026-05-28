@@ -33,38 +33,37 @@ describe("billRepo", () => {
     acmeId = vendorRows.find((v) => v.name === "Acme")!.id;
     globexId = vendorRows.find((v) => v.name === "Globex")!.id;
 
-    await db.insert(bills).values([
-      {
-        organizationId: orgId,
-        vendorId: acmeId,
-        invoiceNumber: "ACME-001",
-        amount: "100.00",
-        issueDate: "2026-01-01",
-        dueDate: "2026-02-01",
-        status: "approved",
-        createdBy: userId,
-      },
-      {
-        organizationId: orgId,
-        vendorId: acmeId,
-        invoiceNumber: "ACME-002",
-        amount: "250.00",
-        issueDate: "2026-01-10",
-        dueDate: "2026-03-01",
-        status: "draft",
-        createdBy: userId,
-      },
-      {
-        organizationId: orgId,
-        vendorId: globexId,
-        invoiceNumber: "GLX-555",
-        amount: "999.00",
-        issueDate: "2026-01-05",
-        dueDate: "2026-02-15",
-        status: "approved",
-        createdBy: userId,
-      },
-    ]);
+    // Insert separately so each row gets a distinct createdAt for ordering tests.
+    await db.insert(bills).values({
+      organizationId: orgId,
+      vendorId: acmeId,
+      invoiceNumber: "ACME-001",
+      amount: "100.00",
+      issueDate: "2026-01-01",
+      dueDate: "2026-02-01",
+      status: "approved",
+      createdBy: userId,
+    });
+    await db.insert(bills).values({
+      organizationId: orgId,
+      vendorId: acmeId,
+      invoiceNumber: "ACME-002",
+      amount: "250.00",
+      issueDate: "2026-01-10",
+      dueDate: "2026-03-01",
+      status: "draft",
+      createdBy: userId,
+    });
+    await db.insert(bills).values({
+      organizationId: orgId,
+      vendorId: globexId,
+      invoiceNumber: "GLX-555",
+      amount: "999.00",
+      issueDate: "2026-01-05",
+      dueDate: "2026-02-15",
+      status: "approved",
+      createdBy: userId,
+    });
   });
 
   afterAll(async () => {
@@ -79,10 +78,9 @@ describe("billRepo", () => {
       expect(acme002!.vendorName).toBe("Acme");
     });
 
-    it("orders by due date ascending", async () => {
+    it("orders by createdAt descending (newest first)", async () => {
       const { items } = await repo.list({ organizationId: orgId, page: 1, pageSize: 100 });
-      const dueDates = items.map((b) => b.dueDate);
-      expect(dueDates).toEqual([...dueDates].sort());
+      expect(items.map((b) => b.invoiceNumber)).toEqual(["GLX-555", "ACME-002", "ACME-001"]);
     });
 
     it("filters by status", async () => {

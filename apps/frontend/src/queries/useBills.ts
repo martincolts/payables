@@ -12,13 +12,25 @@ export interface BillsQuery {
   pageSize?: number;
   status?: BillStatus;
   search?: string;
+  vendorId?: string;
+  dueAfter?: string;
+  dueBefore?: string;
 }
 
 export function useBills(query: BillsQuery = {}) {
-  const { page = 1, pageSize = 20, status, search } = query;
+  const { page = 1, pageSize = 20, status, search, vendorId, dueAfter, dueBefore } = query;
 
   return useQuery({
-    queryKey: ["bills", page, pageSize, status ?? null, search ?? null],
+    queryKey: [
+      "bills",
+      page,
+      pageSize,
+      status ?? null,
+      search ?? null,
+      vendorId ?? null,
+      dueAfter ?? null,
+      dueBefore ?? null,
+    ],
     placeholderData: keepPreviousData,
     queryFn: async () => {
       const res = await api.api.bills.$get({
@@ -27,6 +39,9 @@ export function useBills(query: BillsQuery = {}) {
           pageSize: String(pageSize),
           ...(status ? { status } : {}),
           ...(search ? { search } : {}),
+          ...(vendorId ? { vendorId } : {}),
+          ...(dueAfter ? { dueAfter } : {}),
+          ...(dueBefore ? { dueBefore } : {}),
         },
       });
       if (!res.ok) throw new Error("Couldn't load bills");
