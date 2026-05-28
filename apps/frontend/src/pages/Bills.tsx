@@ -46,6 +46,7 @@ import { StatusChip } from "../components/StatusChip";
 import { BillFormDialog } from "../components/BillFormDialog";
 import { BillApprovalsDialog } from "../components/BillApprovalsDialog";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { DateRangeField } from "../components/DateRangeField";
 import { formatDate, formatMoney, isOverdue } from "../lib/format";
 
 const STATUS_LABELS: Record<BillStatus, string> = {
@@ -238,41 +239,21 @@ export function Bills() {
             ))}
           </Select>
         </FormControl>
-        <TextField
-          label="Due from"
-          type="date"
-          size="small"
-          value={dueAfter}
-          onChange={(e) => updateParams({ dueAfter: e.target.value }, { resetPage: true })}
-          slotProps={{ inputLabel: { shrink: true } }}
-          sx={{ minWidth: 150, flexGrow: { xs: 1, sm: 0 } }}
+        <DateRangeField
+          label="Due date"
+          from={dueAfter}
+          to={dueBefore}
+          onChange={({ from, to }) =>
+            updateParams({ dueAfter: from, dueBefore: to }, { resetPage: true })
+          }
         />
-        <TextField
-          label="Due to"
-          type="date"
-          size="small"
-          value={dueBefore}
-          onChange={(e) => updateParams({ dueBefore: e.target.value }, { resetPage: true })}
-          slotProps={{ inputLabel: { shrink: true } }}
-          sx={{ minWidth: 150, flexGrow: { xs: 1, sm: 0 } }}
-        />
-        <TextField
-          label="Issued from"
-          type="date"
-          size="small"
-          value={issueAfter}
-          onChange={(e) => updateParams({ issueAfter: e.target.value }, { resetPage: true })}
-          slotProps={{ inputLabel: { shrink: true } }}
-          sx={{ minWidth: 150, flexGrow: { xs: 1, sm: 0 } }}
-        />
-        <TextField
-          label="Issued to"
-          type="date"
-          size="small"
-          value={issueBefore}
-          onChange={(e) => updateParams({ issueBefore: e.target.value }, { resetPage: true })}
-          slotProps={{ inputLabel: { shrink: true } }}
-          sx={{ minWidth: 150, flexGrow: { xs: 1, sm: 0 } }}
+        <DateRangeField
+          label="Issue date"
+          from={issueAfter}
+          to={issueBefore}
+          onChange={({ from, to }) =>
+            updateParams({ issueAfter: from, issueBefore: to }, { resetPage: true })
+          }
         />
         <FormControlLabel
           control={
