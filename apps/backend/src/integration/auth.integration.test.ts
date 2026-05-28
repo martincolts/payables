@@ -14,9 +14,14 @@ describe("auth (integration)", () => {
   });
 
   describe("POST /api/auth/signup", () => {
-    it("registers a user and returns a token + user (no password hash)", async () => {
+    it("registers a user + org and returns a token + user (no password hash)", async () => {
       const res = await app.client.api.auth.signup.$post({
-        json: { name: "Ada Lovelace", email: "ada@example.com", password: "password123" },
+        json: {
+          name: "Ada Lovelace",
+          organizationName: "Analytical Engines",
+          email: "ada@example.com",
+          password: "password123",
+        },
       });
 
       expect(res.status).toBe(201);
@@ -29,6 +34,7 @@ describe("auth (integration)", () => {
         role: "admin", // signup always creates an admin
       });
       expect(body.user.id).toMatch(/^[0-9a-f-]{36}$/);
+      expect(body.user.organizationId).toMatch(/^[0-9a-f-]{36}$/);
       expect(body.user).not.toHaveProperty("passwordHash");
     });
 
@@ -36,15 +42,20 @@ describe("auth (integration)", () => {
       await registerUser(app.client, { email: "dup@example.com" });
 
       const res = await app.client.api.auth.signup.$post({
-        json: { name: "Second", email: "dup@example.com", password: "password123" },
+        json: {
+          name: "Second",
+          organizationName: "Another Org",
+          email: "dup@example.com",
+          password: "password123",
+        },
       });
       expect(res.status).toBe(409);
     });
 
     it("rejects an invalid body with 400", async () => {
       const res = await app.client.api.auth.signup.$post({
-        // password too short, email malformed
-        json: { name: "Bad", email: "not-an-email", password: "short" },
+        // password too short, email malformed, org name missing
+        json: { name: "Bad", organizationName: "", email: "not-an-email", password: "short" },
       });
       expect(res.status).toBe(400);
     });

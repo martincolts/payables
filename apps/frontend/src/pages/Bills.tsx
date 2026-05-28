@@ -23,12 +23,16 @@ import {
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
+import SendIcon from "@mui/icons-material/Send";
+import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
 import { toast } from "react-toastify";
 import { billStatuses, type BillListItem, type BillStatus } from "@payables/shared";
 import { useBills, useDeleteBill } from "../queries/useBills";
+import { useSubmitBill } from "../queries/useApprovals";
 import { useAuth } from "../auth/AuthContext";
 import { StatusChip } from "../components/StatusChip";
 import { BillFormDialog } from "../components/BillFormDialog";
+import { BillApprovalsDialog } from "../components/BillApprovalsDialog";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { formatDate, formatMoney, isOverdue } from "../lib/format";
 
@@ -50,7 +54,18 @@ export function Bills() {
   const [search, setSearch] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [toDelete, setToDelete] = useState<BillListItem | null>(null);
+  const [reviewing, setReviewing] = useState<BillListItem | null>(null);
   const deleteBill = useDeleteBill();
+  const submitBill = useSubmitBill();
+
+  async function handleSubmit(bill: BillListItem) {
+    try {
+      await submitBill.mutateAsync(bill.id);
+      toast.success("Bill submitted for approval");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't submit bill");
+    }
+  }
 
   const { data, isLoading, isError } = useBills({
     page: page + 1,
@@ -139,7 +154,7 @@ export function Bills() {
                 <TableCell>Status</TableCell>
                 <TableCell align="right">Amount</TableCell>
                 <TableCell>Due date</TableCell>
-                {isAdmin && <TableCell align="right">Actions</TableCell>}
+                <TableCell align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -171,9 +186,32 @@ export function Bills() {
                         {overdue && " · Overdue"}
                       </Typography>
                     </TableCell>
-                    {isAdmin && (
-                      <TableCell align="right">
-                        {bill.status === "draft" && (
+                    <TableCell align="right">
+                      <Stack direction="row" spacing={0.5} sx={{ justifyContent: "flex-end" }}>
+                        {isAdmin && bill.status === "draft" && (
+                          <Tooltip title="Submit for approval">
+                            <IconButton
+                              aria-label={`Submit bill ${bill.invoiceNumber ?? bill.id} for approval`}
+                              size="small"
+                              disabled={submitBill.isPending}
+                              onClick={() => handleSubmit(bill)}
+                            >
+                              <SendIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                        {bill.status !== "draft" && (
+                          <Tooltip title="View approvals">
+                            <IconButton
+                              aria-label={`View approvals for bill ${bill.invoiceNumber ?? bill.id}`}
+                              size="small"
+                              onClick={() => setReviewing(bill)}
+                            >
+                              <FactCheckOutlinedIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                        {isAdmin && bill.status === "draft" && (
                           <Tooltip title="Delete draft bill">
                             <IconButton
                               aria-label={`Delete bill ${bill.invoiceNumber ?? bill.id}`}
@@ -184,8 +222,8 @@ export function Bills() {
                             </IconButton>
                           </Tooltip>
                         )}
-                      </TableCell>
-                    )}
+                      </Stack>
+                    </TableCell>
                   </TableRow>
                 );
               })}
@@ -211,6 +249,7 @@ export function Bills() {
       )}
 
       <BillFormDialog open={formOpen} onClose={() => setFormOpen(false)} />
+      <BillApprovalsDialog bill={reviewing} onClose={() => setReviewing(null)} />
       <ConfirmDialog
         open={toDelete !== null}
         title="Delete bill"

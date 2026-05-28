@@ -23,3 +23,12 @@ export type ApprovalStatus = z.infer<typeof approvalStatusSchema>;
 export const paymentStatuses = ["scheduled", "paid", "failed"] as const;
 export const paymentStatusSchema = z.enum(paymentStatuses);
 export type PaymentStatus = z.infer<typeof paymentStatusSchema>;
+
+/** A user is `pending` until they accept their invitation and set a password. */
+export const userStatuses = ["pending", "active"] as const;
+export const userStatusSchema = z.enum(userStatuses);
+export type UserStatus = z.infer<typeof userStatusSchema>;
+
+export const invitationStatuses = ["pending", "accepted"] as const;
+export const invitationStatusSchema = z.enum(invitationStatuses);
+export type InvitationStatus = z.infer<typeof invitationStatusSchema>;

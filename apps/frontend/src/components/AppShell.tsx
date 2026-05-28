@@ -18,17 +18,28 @@ import MenuIcon from "@mui/icons-material/Menu";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
 import StorefrontIcon from "@mui/icons-material/Storefront";
+import GroupIcon from "@mui/icons-material/Group";
+import SettingsIcon from "@mui/icons-material/Settings";
 import LogoutIcon from "@mui/icons-material/Logout";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 
 const DRAWER_WIDTH = 240;
 
-const NAV_ITEMS = [
+interface NavItem {
+  label: string;
+  to: string;
+  icon: ReactNode;
+  adminOnly?: boolean;
+}
+
+const NAV_ITEMS: readonly NavItem[] = [
   { label: "Dashboard", to: "/", icon: <DashboardIcon /> },
   { label: "Bills", to: "/bills", icon: <ReceiptLongIcon /> },
   { label: "Vendors", to: "/vendors", icon: <StorefrontIcon /> },
-] as const;
+  { label: "Team", to: "/team", icon: <GroupIcon />, adminOnly: true },
+  { label: "Settings", to: "/settings", icon: <SettingsIcon />, adminOnly: true },
+];
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
@@ -44,7 +55,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </Toolbar>
       <Divider />
       <List sx={{ flexGrow: 1 }}>
-        {NAV_ITEMS.map((item) => (
+        {NAV_ITEMS.filter((item) => !item.adminOnly || user?.role === "admin").map((item) => (
           <ListItemButton
             key={item.to}
             component={Link}

@@ -8,3 +8,10 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
   if (!token) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
+
+/** Gates an admin-only route: non-admins are bounced to the dashboard. */
+export function AdminRoute({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  if (user?.role !== "admin") return <Navigate to="/" replace />;
+  return <>{children}</>;
+}

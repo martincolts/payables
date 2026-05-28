@@ -10,21 +10,21 @@ export type VendorService = ReturnType<typeof createVendorService>;
 
 export function createVendorService(repo: VendorRepo) {
   return {
-    create(input: CreateVendorInput): Promise<Vendor> {
-      return repo.create(input);
+    create(input: CreateVendorInput, organizationId: string): Promise<Vendor> {
+      return repo.create(input, organizationId);
     },
 
-    getById(id: string): Promise<Vendor> {
-      return repo.getById(id);
+    getById(id: string, organizationId: string): Promise<Vendor> {
+      return repo.getById(id, organizationId);
     },
 
     /** Soft-deletes a vendor by marking it inactive. */
-    deactivate(id: string): Promise<Vendor> {
-      return repo.deactivate(id);
+    deactivate(id: string, organizationId: string): Promise<Vendor> {
+      return repo.deactivate(id, organizationId);
     },
 
-    async list(query: PaginationQuery): Promise<Paginated<Vendor>> {
-      const { items, total } = await repo.list(query);
+    async list(organizationId: string, query: PaginationQuery): Promise<Paginated<Vendor>> {
+      const { items, total } = await repo.list(organizationId, query);
       return {
         items,
         page: query.page,

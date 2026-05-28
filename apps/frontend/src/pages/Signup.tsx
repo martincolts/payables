@@ -19,13 +19,14 @@ export function Signup() {
   const { setSession } = useAuth();
   const signup = useSignup();
   const [name, setName] = useState("");
+  const [organizationName, setOrganizationName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     signup.mutate(
-      { name, email, password },
+      { name, organizationName, email, password },
       {
         onSuccess: (res) => {
           setSession(res);
@@ -54,17 +55,26 @@ export function Signup() {
             Create account
           </Typography>
           <Typography color="text.secondary" sx={{ mb: 3 }}>
-            Sign up to start managing your payments.
+            Sign up to create your organization and start managing payments.
           </Typography>
           <Box component="form" onSubmit={onSubmit}>
             <Stack spacing={2}>
               <TextField
-                label="Name"
+                label="Your name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 autoComplete="name"
                 required
                 fullWidth
+              />
+              <TextField
+                label="Organization name"
+                value={organizationName}
+                onChange={(e) => setOrganizationName(e.target.value)}
+                autoComplete="organization"
+                required
+                fullWidth
+                helperText="You'll be the admin and can invite teammates"
               />
               <TextField
                 label="Email"

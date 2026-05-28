@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, gte, ilike, lte, or, sql, type SQL } from "drizzle-orm";
 import type {
   BillListItem,
+  BillStatus,
   CreateBillInput,
   ListBillsQuery,
   PaginationQuery,
@@ -9,19 +10,30 @@ import type { DB } from "../db/client.js";
 import { billLineItems, bills, vendors } from "../db/schema/index.js";
 import { NotFoundError } from "../types/errors.js";
 
-export type ListBillsParams = ListBillsQuery & PaginationQuery;
+export type ListBillsParams = ListBillsQuery &
+  PaginationQuery & { organizationId: string };
 
 /** Consumer-side interface: the slice of bill persistence services depend on. */
 export type BillRepo = {
   list(params: ListBillsParams): Promise<{ items: BillListItem[]; total: number }>;
-  getById(id: string): Promise<BillListItem>;
+  getById(id: string, organizationId: string): Promise<BillListItem>;
   /**
    * Inserts a bill and its line items in one transaction. The bill's total
    * `amount` is the sum of its line items. Returns the enriched list item.
    */
-  create(input: CreateBillInput, createdBy: string): Promise<BillListItem>;
+  create(
+    input: CreateBillInput,
+    createdBy: string,
+    organizationId: string,
+  ): Promise<BillListItem>;
+  /** Sets a bill's status. Throws if the bill is unknown in the org. */
+  updateStatus(
+    id: string,
+    organizationId: string,
+    status: BillStatus,
+  ): Promise<BillListItem>;
   /** Hard-deletes a bill; line items cascade. Throws if the bill is unknown. */
-  delete(id: string): Promise<void>;
+  delete(id: string, organizationId: string): Promise<void>;
 };
 
 /** Sums money strings ("12.34") exactly via integer cents. */
@@ -51,10 +63,10 @@ function toBillListItem(row: BillRow, vendorName: string): BillListItem {
 
 export function createBillRepo(db: DB): BillRepo {
   return {
-    async list({ page, pageSize, status, vendorId, dueBefore, dueAfter, search }) {
+    async list({ organizationId, page, pageSize, status, vendorId, dueBefore, dueAfter, search }) {
       const offset = (page - 1) * pageSize;
 
-      const conditions: SQL[] = [];
+      const conditions: SQL[] = [eq(bills.organizationId, organizationId)];
       if (status) conditions.push(eq(bills.status, status));
       if (vendorId) conditions.push(eq(bills.vendorId, vendorId));
       if (dueBefore) conditions.push(lte(bills.dueDate, dueBefore));
@@ -89,24 +101,25 @@ export function createBillRepo(db: DB): BillRepo {
       };
     },
 
-    async getById(id) {
+    async getById(id, organizationId) {
       const [row] = await db
         .select({ bill: bills, vendorName: vendors.name })
         .from(bills)
         .innerJoin(vendors, eq(bills.vendorId, vendors.id))
-        .where(eq(bills.id, id))
+        .where(and(eq(bills.id, id), eq(bills.organizationId, organizationId)))
         .limit(1);
       if (!row) throw new NotFoundError("Bill", id);
       return toBillListItem(row.bill, row.vendorName);
     },
 
-    async create(input, createdBy) {
+    async create(input, createdBy, organizationId) {
       const amount = sumAmounts(input.lineItems.map((li) => li.amount));
 
       const billId = await db.transaction(async (tx) => {
         const [bill] = await tx
           .insert(bills)
           .values({
+            organizationId,
             vendorId: input.vendorId,
             invoiceNumber: input.invoiceNumber ?? null,
             amount,
@@ -129,13 +142,24 @@ export function createBillRepo(db: DB): BillRepo {
         return bill!.id;
       });
 
-      return this.getById(billId);
+      return this.getById(billId, organizationId);
     },
 
-    async delete(id) {
-      const deleted = await db.delete(bills).where(eq(bills.id, id)).returning({
-        id: bills.id,
-      });
+    async updateStatus(id, organizationId, status) {
+      const [row] = await db
+        .update(bills)
+        .set({ status })
+        .where(and(eq(bills.id, id), eq(bills.organizationId, organizationId)))
+        .returning({ id: bills.id });
+      if (!row) throw new NotFoundError("Bill", id);
+      return this.getById(id, organizationId);
+    },
+
+    async delete(id, organizationId) {
+      const deleted = await db
+        .delete(bills)
+        .where(and(eq(bills.id, id), eq(bills.organizationId, organizationId)))
+        .returning({ id: bills.id });
       if (deleted.length === 0) throw new NotFoundError("Bill", id);
     },
   };

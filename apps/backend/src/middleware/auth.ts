@@ -4,6 +4,7 @@ import { jwtVerify } from "jose";
 
 export interface AuthUser {
   id: string;
+  organizationId: string;
   email: string;
   role: string;
 }
@@ -26,6 +27,7 @@ export function authMiddleware(jwtSecret: string) {
       const { payload } = await jwtVerify(token, key);
       c.set("user", {
         id: String(payload.sub),
+        organizationId: String(payload.organizationId ?? ""),
         email: String(payload.email ?? ""),
         role: String(payload.role ?? "admin"),
       });
@@ -43,6 +45,17 @@ export function authMiddleware(jwtSecret: string) {
 export const requireAdmin = createMiddleware<AuthEnv>(async (c, next) => {
   if (c.get("user").role !== "admin") {
     throw new HTTPException(403, { message: "Admin role required" });
+  }
+  await next();
+});
+
+/**
+ * Gate that allows only `approver` users through — for the decision endpoints.
+ * Must run after {@link authMiddleware}.
+ */
+export const requireApprover = createMiddleware<AuthEnv>(async (c, next) => {
+  if (c.get("user").role !== "approver") {
+    throw new HTTPException(403, { message: "Approver role required" });
   }
   await next();
 });

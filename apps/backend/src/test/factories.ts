@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
 import type {
   AuthResponse,
   BillListItem,
@@ -7,7 +6,6 @@ import type {
   PaymentMethod,
   Vendor,
 } from "@payables/shared";
-import { users } from "../db/schema/index.js";
 import { authHeaders, type TestApp, type TestClient } from "./testApp.js";
 
 /**
@@ -21,14 +19,23 @@ import { authHeaders, type TestApp, type TestClient } from "./testApp.js";
  * unique constraints) and accepts overrides for the fields a test cares about.
  */
 
-/** Registers a brand-new user and returns the auth response (token + user). */
+/**
+ * Registers a brand-new user — which also creates their organization, with the
+ * user as its first admin — and returns the auth response (token + user).
+ */
 export async function registerUser(
   client: TestClient,
-  overrides: { name?: string; email?: string; password?: string } = {},
+  overrides: {
+    name?: string;
+    organizationName?: string;
+    email?: string;
+    password?: string;
+  } = {},
 ): Promise<AuthResponse> {
   const res = await client.api.auth.signup.$post({
     json: {
       name: overrides.name ?? "Test User",
+      organizationName: overrides.organizationName ?? `Org ${randomUUID().slice(0, 8)}`,
       email: overrides.email ?? `user-${randomUUID()}@example.com`,
       password: overrides.password ?? "password123",
     },
@@ -80,21 +87,42 @@ export async function createVendor(
 }
 
 /**
- * Registers a user, demotes them to `approver` in the DB, then logs in so the
- * returned token carries the non-admin role. Used to exercise the admin gate —
- * signup always mints admins, so there's no pure-API path to a non-admin token.
+ * Invites an approver into the admin's organization and accepts the invitation,
+ * returning the new approver's session (token + user). This is the only path to
+ * an approver — they always join an existing org via invitation.
+ */
+export async function inviteAndAcceptApprover(
+  client: TestClient,
+  adminToken: string,
+  overrides: { name?: string; email?: string; password?: string } = {},
+): Promise<AuthResponse> {
+  const email = overrides.email ?? `approver-${randomUUID()}@example.com`;
+  const password = overrides.password ?? "password123";
+
+  const inviteRes = await client.api.invitations.$post(
+    { json: { name: overrides.name ?? "Approver", email, role: "approver" } },
+    authHeaders(adminToken),
+  );
+  if (inviteRes.status !== 201) {
+    throw new Error(`invite failed: ${inviteRes.status} ${await inviteRes.text()}`);
+  }
+  const { token } = await inviteRes.json();
+
+  const acceptRes = await client.api.invite.accept.$post({ json: { token, password } });
+  if (acceptRes.status !== 200) {
+    throw new Error(`accept failed: ${acceptRes.status} ${await acceptRes.text()}`);
+  }
+  return acceptRes.json();
+}
+
+/**
+ * Returns a token for an approver in a *separate* organization — enough to
+ * exercise the admin gate (role check), where the org doesn't matter.
  */
 export async function approverToken(app: TestApp): Promise<string> {
-  const email = `approver-${randomUUID()}@example.com`;
-  const password = "password123";
-  await registerUser(app.client, { email, password });
-  await app.testDb.db.update(users).set({ role: "approver" }).where(eq(users.email, email));
-
-  const res = await app.client.api.auth.login.$post({ json: { email, password } });
-  if (res.status !== 200) {
-    throw new Error(`approverToken login failed: ${res.status} ${await res.text()}`);
-  }
-  return (await res.json()).token;
+  const { token: adminToken } = await registerUser(app.client);
+  const { token } = await inviteAndAcceptApprover(app.client, adminToken);
+  return token;
 }
 
 /** Creates a bill as an authenticated (admin) caller and returns it. */

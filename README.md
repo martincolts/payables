@@ -33,9 +33,24 @@ draft → pending_approval → approved → scheduled → paid
 - Vendor-level payment method defaults (ACH, wire, check)
 
 ### 3. Approval workflow
-- Assign an approver when submitting a bill
-- Approvers can approve or reject with a required comment on rejection
+- Admins submit a draft bill for approval (`draft → pending_approval`)
+- Approvers approve or reject, with a required comment on rejection
+- **Configurable quorum:** each organization sets how many *distinct* approvers
+  must approve a bill before it moves to `approved` (Settings → "Approvals
+  required per bill"). Any single rejection moves it to `rejected`.
 - Activity log per bill showing every state transition
+
+### 3a. Organizations, team & invitations
+- **Multi-tenant:** every user, vendor, and bill belongs to an organization.
+  Signup creates a new organization with the signer as its first **admin**.
+- Admins invite teammates as **admin** or **approver** from the Team page.
+- Accepting an invitation activates the account (the invitee sets a password)
+  and logs them straight in.
+- **Note on invitations:** to keep the MVP self-contained, accepting an invite
+  is an in-app flow — creating an invitation surfaces a link the admin shares
+  manually. In a real application this link would be **emailed** to the invitee
+  (e.g. via SendGrid/SES) rather than shown in the UI. The acceptance endpoint
+  and token model are already exactly what an emailed link would use.
 
 ### 4. Payments
 - Schedule a payment with a target date and method
@@ -65,7 +80,17 @@ draft → pending_approval → approved → scheduled → paid
 
 ## Current status
 
-The Nx + pnpm monorepo is scaffolded and wired end-to-end; the **Vendors** slice is implemented through every layer (repository → service → Hono route → typed RPC client → React page with pagination) as the reference pattern. The full Drizzle schema for all tables exists, the bill state machine is in place (`apps/backend/src/services/billStateMachine.ts`), and `nx run-many -t typecheck` / `nx build frontend` pass. Bills, approvals, payments, the dashboard, and auth login are the next slices to build on top of this foundation.
+The Nx + pnpm monorepo is wired end-to-end through every layer (repository →
+service → Hono route → typed RPC client → React page with pagination). Auth,
+vendors, bills, **multi-tenant organizations**, **invitations**, and the
+**configurable approval quorum** are implemented and covered by repository +
+end-to-end integration tests (real Postgres, real Hono app). The bill state
+machine is enforced server-side (`apps/backend/src/services/billStateMachine.ts`).
+`nx run-many -t typecheck` and the backend test suite pass.
+
+**Multi-tenancy note:** `users.email` is globally unique so login-by-email is
+unambiguous (a person belongs to one org). A multi-org-membership model would
+scope email per-org and resolve the org at login — deliberately out of scope.
 
 ## Setup instructions
 
@@ -115,7 +140,16 @@ The schema is the source of truth in `apps/backend/src/db/schema`. After editing
 pnpm nx run backend:seed
 ```
 
-Currently seeds the demo vendors (AWS, Stripe, Figma, WeWork, Notion). Bill/user/payment seeding lands with those repositories.
+Seeds a demo organization ("Payables Demo Co", configured to require **2
+approvals** per bill), demo vendors (AWS, Stripe, Figma, WeWork, Notion), and a
+spread of bills across statuses. Two demo accounts (password `password123`):
+
+| Email | Role |
+|---|---|
+| `admin@payables.com` | admin — create/submit bills, manage the team & settings |
+| `approver@payables.com` | approver — approve/reject bills pending approval |
+
+The seed is idempotent: re-running reuses the existing demo org.
 
 ### Run
 

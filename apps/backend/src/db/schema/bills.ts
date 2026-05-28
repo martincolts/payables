@@ -9,9 +9,13 @@ import {
 import { billStatusEnum } from "./enums.js";
 import { vendors } from "./vendors.js";
 import { users } from "./users.js";
+import { organizations } from "./organizations.js";
 
 export const bills = pgTable("bills", {
   id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id),
   vendorId: uuid("vendor_id")
     .notNull()
     .references(() => vendors.id),

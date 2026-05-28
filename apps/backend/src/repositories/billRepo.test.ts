@@ -1,15 +1,17 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { billLineItems, bills, users, vendors } from "../db/schema/index.js";
+import { billLineItems, bills, vendors } from "../db/schema/index.js";
 import { NotFoundError } from "../types/errors.js";
 import { createBillRepo, type BillRepo } from "./billRepo.js";
 import { createTestDb, type TestDb } from "../test/testDb.js";
+import { seedOrg } from "../test/repoHelpers.js";
 
 describe("billRepo", () => {
   let testDb: TestDb;
   let repo: BillRepo;
 
   // FK targets, populated in beforeAll.
+  let orgId: string;
   let userId: string;
   let acmeId: string; // vendor "Acme"
   let globexId: string; // vendor "Globex"
@@ -19,22 +21,13 @@ describe("billRepo", () => {
     repo = createBillRepo(testDb.db);
     const { db } = testDb;
 
-    const [user] = await db
-      .insert(users)
-      .values({
-        name: "Admin",
-        email: "admin@example.com",
-        passwordHash: "scrypt$00$11",
-        role: "admin",
-      })
-      .returning();
-    userId = user!.id;
+    ({ organizationId: orgId, ownerId: userId } = await seedOrg(db));
 
     const vendorRows = await db
       .insert(vendors)
       .values([
-        { name: "Acme", email: "ap@acme.com", paymentMethod: "ach" },
-        { name: "Globex", email: "ap@globex.com", paymentMethod: "wire" },
+        { organizationId: orgId, name: "Acme", email: "ap@acme.com", paymentMethod: "ach" },
+        { organizationId: orgId, name: "Globex", email: "ap@globex.com", paymentMethod: "wire" },
       ])
       .returning();
     acmeId = vendorRows.find((v) => v.name === "Acme")!.id;
@@ -42,6 +35,7 @@ describe("billRepo", () => {
 
     await db.insert(bills).values([
       {
+        organizationId: orgId,
         vendorId: acmeId,
         invoiceNumber: "ACME-001",
         amount: "100.00",
@@ -51,6 +45,7 @@ describe("billRepo", () => {
         createdBy: userId,
       },
       {
+        organizationId: orgId,
         vendorId: acmeId,
         invoiceNumber: "ACME-002",
         amount: "250.00",
@@ -60,6 +55,7 @@ describe("billRepo", () => {
         createdBy: userId,
       },
       {
+        organizationId: orgId,
         vendorId: globexId,
         invoiceNumber: "GLX-555",
         amount: "999.00",
@@ -77,20 +73,21 @@ describe("billRepo", () => {
 
   describe("list", () => {
     it("returns all bills with the joined vendor name", async () => {
-      const { items, total } = await repo.list({ page: 1, pageSize: 100 });
+      const { items, total } = await repo.list({ organizationId: orgId, page: 1, pageSize: 100 });
       expect(total).toBe(3);
       const acme002 = items.find((b) => b.invoiceNumber === "ACME-002");
       expect(acme002!.vendorName).toBe("Acme");
     });
 
     it("orders by due date ascending", async () => {
-      const { items } = await repo.list({ page: 1, pageSize: 100 });
+      const { items } = await repo.list({ organizationId: orgId, page: 1, pageSize: 100 });
       const dueDates = items.map((b) => b.dueDate);
       expect(dueDates).toEqual([...dueDates].sort());
     });
 
     it("filters by status", async () => {
       const { items, total } = await repo.list({
+        organizationId: orgId,
         page: 1,
         pageSize: 100,
         status: "approved",
@@ -101,6 +98,7 @@ describe("billRepo", () => {
 
     it("filters by vendorId", async () => {
       const { items, total } = await repo.list({
+        organizationId: orgId,
         page: 1,
         pageSize: 100,
         vendorId: globexId,
@@ -111,6 +109,7 @@ describe("billRepo", () => {
 
     it("filters by due date range", async () => {
       const { items } = await repo.list({
+        organizationId: orgId,
         page: 1,
         pageSize: 100,
         dueBefore: "2026-02-20",
@@ -121,35 +120,47 @@ describe("billRepo", () => {
     });
 
     it("searches across invoice number and vendor name", async () => {
-      const byInvoice = await repo.list({ page: 1, pageSize: 100, search: "GLX" });
+      const byInvoice = await repo.list({ organizationId: orgId, page: 1, pageSize: 100, search: "GLX" });
       expect(byInvoice.total).toBe(1);
       expect(byInvoice.items[0]!.invoiceNumber).toBe("GLX-555");
 
-      const byVendor = await repo.list({ page: 1, pageSize: 100, search: "Acme" });
+      const byVendor = await repo.list({ organizationId: orgId, page: 1, pageSize: 100, search: "Acme" });
       expect(byVendor.total).toBe(2);
     });
 
     it("paginates while reporting the unpaged total", async () => {
-      const firstPage = await repo.list({ page: 1, pageSize: 2 });
+      const firstPage = await repo.list({ organizationId: orgId, page: 1, pageSize: 2 });
       expect(firstPage.items).toHaveLength(2);
       expect(firstPage.total).toBe(3);
+    });
+
+    it("does not list bills from another org", async () => {
+      const { organizationId: otherOrg } = await seedOrg(testDb.db);
+      const { total } = await repo.list({ organizationId: otherOrg, page: 1, pageSize: 100 });
+      expect(total).toBe(0);
     });
   });
 
   describe("getById", () => {
     it("returns the bill with its vendor name", async () => {
-      const { items } = await repo.list({ page: 1, pageSize: 1 });
+      const { items } = await repo.list({ organizationId: orgId, page: 1, pageSize: 1 });
       const target = items[0]!;
 
-      const found = await repo.getById(target.id);
+      const found = await repo.getById(target.id, orgId);
       expect(found.id).toBe(target.id);
       expect(found.vendorName).toBe(target.vendorName);
     });
 
     it("throws NotFoundError for an unknown id", async () => {
       await expect(
-        repo.getById("00000000-0000-0000-0000-000000000000"),
+        repo.getById("00000000-0000-0000-0000-000000000000", orgId),
       ).rejects.toBeInstanceOf(NotFoundError);
+    });
+
+    it("does not return a bill from another org", async () => {
+      const { organizationId: otherOrg } = await seedOrg(testDb.db);
+      const { items } = await repo.list({ organizationId: orgId, page: 1, pageSize: 1 });
+      await expect(repo.getById(items[0]!.id, otherOrg)).rejects.toBeInstanceOf(NotFoundError);
     });
   });
 
@@ -168,6 +179,7 @@ describe("billRepo", () => {
           ],
         },
         userId,
+        orgId,
       );
 
       expect(created.amount).toBe("50.00");
@@ -184,6 +196,33 @@ describe("billRepo", () => {
     });
   });
 
+  describe("updateStatus", () => {
+    it("transitions a bill's status", async () => {
+      const created = await repo.create(
+        {
+          vendorId: acmeId,
+          issueDate: "2026-04-01",
+          dueDate: "2026-05-01",
+          lineItems: [{ description: "Work", amount: "10.00" }],
+        },
+        userId,
+        orgId,
+      );
+
+      const updated = await repo.updateStatus(created.id, orgId, "pending_approval");
+      expect(updated.status).toBe("pending_approval");
+      expect((await repo.getById(created.id, orgId)).status).toBe("pending_approval");
+    });
+
+    it("throws NotFoundError when the bill belongs to another org", async () => {
+      const { organizationId: otherOrg } = await seedOrg(testDb.db);
+      const { items } = await repo.list({ organizationId: orgId, page: 1, pageSize: 1 });
+      await expect(
+        repo.updateStatus(items[0]!.id, otherOrg, "approved"),
+      ).rejects.toBeInstanceOf(NotFoundError);
+    });
+  });
+
   describe("delete", () => {
     it("removes the bill and cascades its line items", async () => {
       const created = await repo.create(
@@ -194,11 +233,12 @@ describe("billRepo", () => {
           lineItems: [{ description: "One-off", amount: "10.00" }],
         },
         userId,
+        orgId,
       );
 
-      await repo.delete(created.id);
+      await repo.delete(created.id, orgId);
 
-      await expect(repo.getById(created.id)).rejects.toBeInstanceOf(NotFoundError);
+      await expect(repo.getById(created.id, orgId)).rejects.toBeInstanceOf(NotFoundError);
       const rows = await testDb.db
         .select()
         .from(billLineItems)
@@ -208,7 +248,7 @@ describe("billRepo", () => {
 
     it("throws NotFoundError when deleting an unknown bill", async () => {
       await expect(
-        repo.delete("00000000-0000-0000-0000-000000000000"),
+        repo.delete("00000000-0000-0000-0000-000000000000", orgId),
       ).rejects.toBeInstanceOf(NotFoundError);
     });
   });

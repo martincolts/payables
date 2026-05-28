@@ -10,11 +10,22 @@ import { createVendorRepo } from "./repositories/vendorRepo.js";
 import { createVendorService } from "./services/vendorService.js";
 import { createVendorRoutes } from "./routes/vendorRoutes.js";
 import { createUserRepo } from "./repositories/userRepo.js";
+import { createOrganizationRepo } from "./repositories/organizationRepo.js";
 import { createAuthService } from "./services/authService.js";
 import { createAuthRoutes } from "./routes/authRoutes.js";
 import { createBillRepo } from "./repositories/billRepo.js";
 import { createBillService } from "./services/billService.js";
 import { createBillRoutes } from "./routes/billRoutes.js";
+import { createApprovalRepo } from "./repositories/approvalRepo.js";
+import { createApprovalService } from "./services/approvalService.js";
+import { createInvitationRepo } from "./repositories/invitationRepo.js";
+import { createInvitationService } from "./services/invitationService.js";
+import {
+  createInvitationRoutes,
+  createPublicInvitationRoutes,
+} from "./routes/invitationRoutes.js";
+import { createOrganizationService } from "./services/organizationService.js";
+import { createOrganizationRoutes } from "./routes/organizationRoutes.js";
 
 /**
  * Wires dependencies and builds the Hono app. The returned app's type is
@@ -24,8 +35,18 @@ import { createBillRoutes } from "./routes/billRoutes.js";
 export function createApp(config: Config, db: DB) {
   const vendorRepo = createVendorRepo(db);
   const vendorService = createVendorService(vendorRepo);
-  const authService = createAuthService(createUserRepo(db), config.JWT_SECRET);
-  const billService = createBillService(createBillRepo(db), vendorRepo);
+  const userRepo = createUserRepo(db);
+  const orgRepo = createOrganizationRepo(db);
+  const billRepo = createBillRepo(db);
+  const authService = createAuthService(userRepo, orgRepo, config.JWT_SECRET);
+  const billService = createBillService(billRepo, vendorRepo);
+  const approvalService = createApprovalService(createApprovalRepo(db), billRepo, orgRepo);
+  const invitationService = createInvitationService(
+    createInvitationRepo(db),
+    userRepo,
+    config.JWT_SECRET,
+  );
+  const organizationService = createOrganizationService(orgRepo, userRepo);
 
   const app = new Hono<AuthEnv>();
 
@@ -36,13 +57,16 @@ export function createApp(config: Config, db: DB) {
 
   const api = app
     .basePath("/api")
-    // Public: authentication endpoints, registered before the auth gate.
+    // Public: authentication + invitation-acceptance, before the auth gate.
     .route("/auth", createAuthRoutes(authService))
+    .route("/invite", createPublicInvitationRoutes(invitationService))
     // Everything below requires a valid bearer token.
     .use("*", authMiddleware(config.JWT_SECRET))
     .get("/me", (c) => c.json(c.get("user")))
+    .route("/organization", createOrganizationRoutes(organizationService))
+    .route("/invitations", createInvitationRoutes(invitationService))
     .route("/vendors", createVendorRoutes(vendorService))
-    .route("/bills", createBillRoutes(billService));
+    .route("/bills", createBillRoutes(billService, approvalService));
 
   app.onError((err, c) => {
     if (err instanceof DomainError) {

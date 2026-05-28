@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { CreateVendorInput, PaginationQuery, Vendor } from "@payables/shared";
 import type { DB } from "../db/client.js";
 import { vendors } from "../db/schema/index.js";
@@ -6,12 +6,15 @@ import { NotFoundError } from "../types/errors.js";
 
 /** Consumer-side interface: the slice of vendor persistence services depend on. */
 export type VendorRepo = {
-  create(input: CreateVendorInput): Promise<Vendor>;
-  getById(id: string): Promise<Vendor>;
+  create(input: CreateVendorInput, organizationId: string): Promise<Vendor>;
+  getById(id: string, organizationId: string): Promise<Vendor>;
   /** Soft-delete: flips `isActive` to false. Throws if the vendor is unknown. */
-  deactivate(id: string): Promise<Vendor>;
+  deactivate(id: string, organizationId: string): Promise<Vendor>;
   /** Lists active vendors only (deactivated ones are hidden). */
-  list(params: PaginationQuery): Promise<{ items: Vendor[]; total: number }>;
+  list(
+    organizationId: string,
+    params: PaginationQuery,
+  ): Promise<{ items: Vendor[]; total: number }>;
 };
 
 function toVendor(row: typeof vendors.$inferSelect): Vendor {
@@ -28,10 +31,11 @@ function toVendor(row: typeof vendors.$inferSelect): Vendor {
 
 export function createVendorRepo(db: DB): VendorRepo {
   return {
-    async create(input) {
+    async create(input, organizationId) {
       const [row] = await db
         .insert(vendors)
         .values({
+          organizationId,
           name: input.name,
           email: input.email,
           paymentMethod: input.paymentMethod,
@@ -41,25 +45,32 @@ export function createVendorRepo(db: DB): VendorRepo {
       return toVendor(row!);
     },
 
-    async getById(id) {
-      const [row] = await db.select().from(vendors).where(eq(vendors.id, id)).limit(1);
+    async getById(id, organizationId) {
+      const [row] = await db
+        .select()
+        .from(vendors)
+        .where(and(eq(vendors.id, id), eq(vendors.organizationId, organizationId)))
+        .limit(1);
       if (!row) throw new NotFoundError("Vendor", id);
       return toVendor(row);
     },
 
-    async deactivate(id) {
+    async deactivate(id, organizationId) {
       const [row] = await db
         .update(vendors)
         .set({ isActive: false })
-        .where(eq(vendors.id, id))
+        .where(and(eq(vendors.id, id), eq(vendors.organizationId, organizationId)))
         .returning();
       if (!row) throw new NotFoundError("Vendor", id);
       return toVendor(row);
     },
 
-    async list({ page, pageSize }) {
+    async list(organizationId, { page, pageSize }) {
       const offset = (page - 1) * pageSize;
-      const where = eq(vendors.isActive, true);
+      const where = and(
+        eq(vendors.organizationId, organizationId),
+        eq(vendors.isActive, true),
+      );
       const [rows, [{ count } = { count: 0 }]] = await Promise.all([
         db
           .select()

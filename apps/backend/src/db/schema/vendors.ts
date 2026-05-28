@@ -1,8 +1,12 @@
 import { pgTable, uuid, text, timestamp, boolean } from "drizzle-orm/pg-core";
 import { paymentMethodEnum } from "./enums.js";
+import { organizations } from "./organizations.js";
 
 export const vendors = pgTable("vendors", {
   id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id),
   name: text("name").notNull(),
   email: text("email").notNull(),
   paymentMethod: paymentMethodEnum("payment_method").notNull(),
