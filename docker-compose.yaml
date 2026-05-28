@@ -17,5 +17,45 @@ services:
       timeout: 5s
       retries: 5
 
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    container_name: payables-backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 8080
+      # Built from POSTGRES_* so there's a single source of truth.
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-payables}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      # Same-origin in production (nginx proxies /api), so CORS isn't needed,
+      # but the backend's config schema requires the var to be present.
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile
+    container_name: payables-frontend
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-80}:80"
+    depends_on:
+      - backend
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: payables-cloudflared
+    restart: unless-stopped
+    # Quick Tunnel: free, no account / no domain. Random *.trycloudflare.com URL.
+    # The URL is printed in this container's logs every time it starts.
+    command: tunnel --no-autoupdate --url http://frontend:80
+    depends_on:
+      - frontend
+
 volumes:
   postgres_data:
