@@ -1,12 +1,25 @@
 import type { BillListItem, CreateBillInput, Paginated } from "@payables/shared";
-import type { BillRepo, ListBillsParams } from "../repositories/billRepo.js";
-import type { VendorRepo } from "../repositories/vendorRepo.js";
+import type { DB } from "../db/client.js";
+import {
+  createBillRepo,
+  type BillRepo,
+  type ListBillsParams,
+} from "../repositories/billRepo.js";
+import { createVendorRepo } from "../repositories/vendorRepo.js";
+import { createActivityLogRepo } from "../repositories/activityLogRepo.js";
 import { assertTransition } from "./billStateMachine.js";
 import { ConflictError } from "../types/errors.js";
 
 export type BillService = ReturnType<typeof createBillService>;
 
-export function createBillService(repo: BillRepo, vendorRepo: VendorRepo) {
+/**
+ * Bill operations. Mutations are wrapped in a transaction with their matching
+ * activity-log write so the audit trail can't drift from the data.
+ */
+export function createBillService(db: DB) {
+  const repo: BillRepo = createBillRepo(db);
+  const vendorRepo = createVendorRepo(db);
+
   return {
     getById(id: string, organizationId: string): Promise<BillListItem> {
       return repo.getById(id, organizationId);
@@ -34,23 +47,67 @@ export function createBillService(repo: BillRepo, vendorRepo: VendorRepo) {
       if (!vendor.isActive) {
         throw new ConflictError("Cannot create a bill for a deactivated vendor");
       }
-      return repo.create(input, createdBy, organizationId);
+      return db.transaction(async (tx) => {
+        const bill = await createBillRepo(tx).create(input, createdBy, organizationId);
+        await createActivityLogRepo(tx).log({
+          organizationId,
+          userId: createdBy,
+          action: "bill_created",
+          entityType: "bill",
+          entityId: bill.id,
+          metadata: {
+            vendorId: bill.vendorId,
+            vendorName: bill.vendorName,
+            amount: bill.amount,
+            currency: bill.currency,
+          },
+        });
+        return bill;
+      });
     },
 
     /** Submits a draft bill for approval (draft → pending_approval). */
-    async submitForApproval(id: string, organizationId: string): Promise<BillListItem> {
+    async submitForApproval(
+      id: string,
+      organizationId: string,
+      userId: string,
+    ): Promise<BillListItem> {
       const bill = await repo.getById(id, organizationId);
       assertTransition(bill.status, "pending_approval");
-      return repo.updateStatus(id, organizationId, "pending_approval");
+      return db.transaction(async (tx) => {
+        const updated = await createBillRepo(tx).updateStatus(
+          id,
+          organizationId,
+          "pending_approval",
+        );
+        await createActivityLogRepo(tx).log({
+          organizationId,
+          userId,
+          action: "bill_submitted",
+          entityType: "bill",
+          entityId: id,
+        });
+        return updated;
+      });
     },
 
     /** Deletes a bill. Only draft bills may be deleted. */
-    async remove(id: string, organizationId: string): Promise<void> {
+    async remove(id: string, organizationId: string, userId: string): Promise<void> {
       const bill = await repo.getById(id, organizationId); // throws NotFoundError if unknown
       if (bill.status !== "draft") {
         throw new ConflictError("Only draft bills can be deleted");
       }
-      await repo.delete(id, organizationId);
+      await db.transaction(async (tx) => {
+        await createBillRepo(tx).delete(id, organizationId);
+        await createActivityLogRepo(tx).log({
+          organizationId,
+          userId,
+          action: "bill_deleted",
+          entityType: "bill",
+          entityId: id,
+          metadata: { vendorId: bill.vendorId, vendorName: bill.vendorName },
+        });
+      });
     },
   };
 }

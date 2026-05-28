@@ -6,6 +6,7 @@ import { Vendors } from "./pages/Vendors";
 import { Bills } from "./pages/Bills";
 import { Team } from "./pages/Team";
 import { Settings } from "./pages/Settings";
+import { ActivityLog } from "./pages/ActivityLog";
 import { Login } from "./pages/Login";
 import { Signup } from "./pages/Signup";
 import { AcceptInvite } from "./pages/AcceptInvite";
@@ -39,6 +40,14 @@ export function App() {
                   element={
                     <AdminRoute>
                       <Settings />
+                    </AdminRoute>
+                  }
+                />
+                <Route
+                  path="/activity"
+                  element={
+                    <AdminRoute>
+                      <ActivityLog />
                     </AdminRoute>
                   }
                 />

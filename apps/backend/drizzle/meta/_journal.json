@@ -5,22 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1779901970593,
-      "tag": "0000_nostalgic_prodigy",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1779910974715,
-      "tag": "0001_flowery_mole_man",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1779925294260,
-      "tag": "0002_smooth_archangel",
+      "when": 1779934498926,
+      "tag": "0000_hard_monster_badoon",
       "breakpoints": true
     }
   ]

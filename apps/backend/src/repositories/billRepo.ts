@@ -6,7 +6,7 @@ import type {
   ListBillsQuery,
   PaginationQuery,
 } from "@payables/shared";
-import type { DB } from "../db/client.js";
+import type { DbExecutor } from "../db/client.js";
 import { billLineItems, bills, vendors } from "../db/schema/index.js";
 import { NotFoundError } from "../types/errors.js";
 
@@ -61,7 +61,7 @@ function toBillListItem(row: BillRow, vendorName: string): BillListItem {
   };
 }
 
-export function createBillRepo(db: DB): BillRepo {
+export function createBillRepo(db: DbExecutor): BillRepo {
   return {
     async list({ organizationId, page, pageSize, status, vendorId, dueBefore, dueAfter, search }) {
       const offset = (page - 1) * pageSize;

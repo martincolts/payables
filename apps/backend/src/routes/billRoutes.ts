@@ -34,9 +34,11 @@ export function createBillRoutes(
       return c.json(bill);
     })
     .post("/:id/submit", requireAdmin, async (c) => {
+      const user = c.get("user");
       const bill = await service.submitForApproval(
         c.req.param("id"),
-        c.get("user").organizationId,
+        user.organizationId,
+        user.id,
       );
       return c.json(bill);
     })
@@ -63,7 +65,8 @@ export function createBillRoutes(
       },
     )
     .delete("/:id", requireAdmin, async (c) => {
-      await service.remove(c.req.param("id"), c.get("user").organizationId);
+      const user = c.get("user");
+      await service.remove(c.req.param("id"), user.organizationId, user.id);
       return c.body(null, 204);
     });
 }

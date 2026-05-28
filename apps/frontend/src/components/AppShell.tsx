@@ -19,6 +19,7 @@ import DashboardIcon from "@mui/icons-material/Dashboard";
 import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
 import StorefrontIcon from "@mui/icons-material/Storefront";
 import GroupIcon from "@mui/icons-material/Group";
+import HistoryIcon from "@mui/icons-material/History";
 import SettingsIcon from "@mui/icons-material/Settings";
 import LogoutIcon from "@mui/icons-material/Logout";
 import { Link, useLocation } from "react-router-dom";
@@ -38,6 +39,7 @@ const NAV_ITEMS: readonly NavItem[] = [
   { label: "Bills", to: "/bills", icon: <ReceiptLongIcon /> },
   { label: "Vendors", to: "/vendors", icon: <StorefrontIcon /> },
   { label: "Team", to: "/team", icon: <GroupIcon />, adminOnly: true },
+  { label: "Activity", to: "/activity", icon: <HistoryIcon />, adminOnly: true },
   { label: "Settings", to: "/settings", icon: <SettingsIcon />, adminOnly: true },
 ];
 

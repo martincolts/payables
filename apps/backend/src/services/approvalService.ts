@@ -1,17 +1,23 @@
 import type { ApprovalSummary, SubmitApprovalInput } from "@payables/shared";
-import type { ApprovalRepo } from "../repositories/approvalRepo.js";
-import type { BillRepo } from "../repositories/billRepo.js";
+import type { DB } from "../db/client.js";
+import { createApprovalRepo, type ApprovalRepo } from "../repositories/approvalRepo.js";
+import { createBillRepo, type BillRepo } from "../repositories/billRepo.js";
 import type { OrganizationRepo } from "../repositories/organizationRepo.js";
+import { createActivityLogRepo } from "../repositories/activityLogRepo.js";
 import { assertTransition } from "./billStateMachine.js";
 import { ConflictError } from "../types/errors.js";
 
 export type ApprovalService = ReturnType<typeof createApprovalService>;
 
-export function createApprovalService(
-  repo: ApprovalRepo,
-  billRepo: BillRepo,
-  orgRepo: OrganizationRepo,
-) {
+/**
+ * Approval operations. `submitDecision` records the vote and any resulting
+ * status flip inside a single transaction with the matching activity-log
+ * entry, so the audit trail and the bill state advance atomically.
+ */
+export function createApprovalService(db: DB, orgRepo: OrganizationRepo) {
+  const repo: ApprovalRepo = createApprovalRepo(db);
+  const billRepo: BillRepo = createBillRepo(db);
+
   async function summarize(
     billId: string,
     organizationId: string,
@@ -34,7 +40,8 @@ export function createApprovalService(
     /**
      * Records an approver's decision and advances the bill when warranted:
      * any rejection moves it to `rejected`; reaching the org's required count
-     * of distinct approvals moves it to `approved`.
+     * of distinct approvals moves it to `approved`. The decision, the status
+     * change (if any), and the activity-log entry all share one transaction.
      */
     async submitDecision(
       billId: string,
@@ -47,26 +54,48 @@ export function createApprovalService(
         throw new ConflictError("This bill is not awaiting approval");
       }
 
-      await repo.create({
-        billId,
-        approverId,
-        status: input.decision === "approve" ? "approved" : "rejected",
-        comment: input.comment ?? null,
-      });
+      await db.transaction(async (tx) => {
+        const txApprovals = createApprovalRepo(tx);
+        const txBills = createBillRepo(tx);
+        const txLog = createActivityLogRepo(tx);
 
-      if (input.decision === "reject") {
-        assertTransition(bill.status, "rejected");
-        await billRepo.updateStatus(billId, organizationId, "rejected");
-      } else {
-        const [org, approved] = await Promise.all([
-          orgRepo.getById(organizationId),
-          repo.countApproved(billId),
-        ]);
-        if (approved >= org.requiredApprovals) {
-          assertTransition(bill.status, "approved");
-          await billRepo.updateStatus(billId, organizationId, "approved");
+        await txApprovals.create({
+          billId,
+          approverId,
+          status: input.decision === "approve" ? "approved" : "rejected",
+          comment: input.comment ?? null,
+        });
+
+        if (input.decision === "reject") {
+          assertTransition(bill.status, "rejected");
+          await txBills.updateStatus(billId, organizationId, "rejected");
+          await txLog.log({
+            organizationId,
+            userId: approverId,
+            action: "bill_rejected",
+            entityType: "bill",
+            entityId: billId,
+            metadata: input.comment ? { comment: input.comment } : null,
+          });
+        } else {
+          const [org, approved] = await Promise.all([
+            orgRepo.getById(organizationId),
+            txApprovals.countApproved(billId),
+          ]);
+          if (approved >= org.requiredApprovals) {
+            assertTransition(bill.status, "approved");
+            await txBills.updateStatus(billId, organizationId, "approved");
+          }
+          await txLog.log({
+            organizationId,
+            userId: approverId,
+            action: "bill_approved",
+            entityType: "bill",
+            entityId: billId,
+            metadata: input.comment ? { comment: input.comment } : null,
+          });
         }
-      }
+      });
 
       return summarize(billId, organizationId);
     },

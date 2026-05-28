@@ -1,7 +1,7 @@
 import { and, asc, eq, sql } from "drizzle-orm";
 import type { Approval, ApprovalStatus } from "@payables/shared";
 import { approvals, users } from "../db/schema/index.js";
-import type { DB } from "../db/client.js";
+import type { DbExecutor } from "../db/client.js";
 import { ConflictError } from "../types/errors.js";
 import { isUniqueViolation } from "../lib/pgErrors.js";
 
@@ -36,7 +36,7 @@ function toApproval(
   };
 }
 
-export function createApprovalRepo(db: DB): ApprovalRepo {
+export function createApprovalRepo(db: DbExecutor): ApprovalRepo {
   return {
     async create(input) {
       try {

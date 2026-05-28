@@ -6,17 +6,14 @@ import type { Config } from "./config.js";
 import type { DB } from "./db/client.js";
 import { DomainError } from "./types/errors.js";
 import { authMiddleware, type AuthEnv } from "./middleware/auth.js";
-import { createVendorRepo } from "./repositories/vendorRepo.js";
 import { createVendorService } from "./services/vendorService.js";
 import { createVendorRoutes } from "./routes/vendorRoutes.js";
 import { createUserRepo } from "./repositories/userRepo.js";
 import { createOrganizationRepo } from "./repositories/organizationRepo.js";
 import { createAuthService } from "./services/authService.js";
 import { createAuthRoutes } from "./routes/authRoutes.js";
-import { createBillRepo } from "./repositories/billRepo.js";
 import { createBillService } from "./services/billService.js";
 import { createBillRoutes } from "./routes/billRoutes.js";
-import { createApprovalRepo } from "./repositories/approvalRepo.js";
 import { createApprovalService } from "./services/approvalService.js";
 import { createInvitationRepo } from "./repositories/invitationRepo.js";
 import { createInvitationService } from "./services/invitationService.js";
@@ -26,6 +23,9 @@ import {
 } from "./routes/invitationRoutes.js";
 import { createOrganizationService } from "./services/organizationService.js";
 import { createOrganizationRoutes } from "./routes/organizationRoutes.js";
+import { createActivityLogRepo } from "./repositories/activityLogRepo.js";
+import { createActivityLogService } from "./services/activityLogService.js";
+import { createActivityLogRoutes } from "./routes/activityLogRoutes.js";
 
 /**
  * Wires dependencies and builds the Hono app. The returned app's type is
@@ -33,20 +33,19 @@ import { createOrganizationRoutes } from "./routes/organizationRoutes.js";
  * so the wire contract is inferred — never hand-duplicated.
  */
 export function createApp(config: Config, db: DB) {
-  const vendorRepo = createVendorRepo(db);
-  const vendorService = createVendorService(vendorRepo);
+  const vendorService = createVendorService(db);
   const userRepo = createUserRepo(db);
   const orgRepo = createOrganizationRepo(db);
-  const billRepo = createBillRepo(db);
   const authService = createAuthService(userRepo, orgRepo, config.JWT_SECRET);
-  const billService = createBillService(billRepo, vendorRepo);
-  const approvalService = createApprovalService(createApprovalRepo(db), billRepo, orgRepo);
+  const billService = createBillService(db);
+  const approvalService = createApprovalService(db, orgRepo);
   const invitationService = createInvitationService(
     createInvitationRepo(db),
     userRepo,
     config.JWT_SECRET,
   );
   const organizationService = createOrganizationService(orgRepo, userRepo);
+  const activityLogService = createActivityLogService(createActivityLogRepo(db));
 
   const app = new Hono<AuthEnv>();
 
@@ -66,7 +65,8 @@ export function createApp(config: Config, db: DB) {
     .route("/organization", createOrganizationRoutes(organizationService))
     .route("/invitations", createInvitationRoutes(invitationService))
     .route("/vendors", createVendorRoutes(vendorService))
-    .route("/bills", createBillRoutes(billService, approvalService));
+    .route("/bills", createBillRoutes(billService, approvalService))
+    .route("/activity-log", createActivityLogRoutes(activityLogService));
 
   app.onError((err, c) => {
     if (err instanceof DomainError) {

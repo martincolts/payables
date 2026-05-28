@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import type { CreateVendorInput, PaginationQuery, Vendor } from "@payables/shared";
-import type { DB } from "../db/client.js";
+import type { DbExecutor } from "../db/client.js";
 import { vendors } from "../db/schema/index.js";
 import { NotFoundError } from "../types/errors.js";
 
@@ -29,7 +29,7 @@ function toVendor(row: typeof vendors.$inferSelect): Vendor {
   };
 }
 
-export function createVendorRepo(db: DB): VendorRepo {
+export function createVendorRepo(db: DbExecutor): VendorRepo {
   return {
     async create(input, organizationId) {
       const [row] = await db

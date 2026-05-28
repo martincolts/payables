@@ -14,7 +14,12 @@ export function createVendorRoutes(service: VendorService) {
       return c.json(result);
     })
     .post("/", requireAdmin, zValidator("json", createVendorSchema), async (c) => {
-      const vendor = await service.create(c.req.valid("json"), c.get("user").organizationId);
+      const user = c.get("user");
+      const vendor = await service.create(
+        c.req.valid("json"),
+        user.organizationId,
+        user.id,
+      );
       return c.json(vendor, 201);
     })
     .get("/:id", async (c) => {
@@ -22,7 +27,12 @@ export function createVendorRoutes(service: VendorService) {
       return c.json(vendor);
     })
     .delete("/:id", requireAdmin, async (c) => {
-      const vendor = await service.deactivate(c.req.param("id"), c.get("user").organizationId);
+      const user = c.get("user");
+      const vendor = await service.deactivate(
+        c.req.param("id"),
+        user.organizationId,
+        user.id,
+      );
       return c.json(vendor);
     });
 }
