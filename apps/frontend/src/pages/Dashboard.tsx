@@ -332,6 +332,7 @@ export function Dashboard() {
     return {
       names: items.map((v) => truncate(v.vendorName, isSm ? 14 : 22)),
       values: items.map((v) => Number(v.totalAmount)),
+      ids: items.map((v) => v.vendorId),
     };
   }, [stats, isSm]);
 
@@ -501,6 +502,12 @@ export function Dashboard() {
                       margin={{ left: isSm ? 90 : 130, right: 24, top: 16, bottom: 32 }}
                       hideLegend
                       grid={{ vertical: true }}
+                      onItemClick={(_, item) => {
+                        const id = vendorBars.ids[item.dataIndex];
+                        if (!id) return;
+                        navigate(billsHref({ vendorId: id, ...dateRange }));
+                      }}
+                      sx={{ cursor: "pointer" }}
                     />
                   )}
                 </CardContent>
@@ -721,6 +728,19 @@ export function Dashboard() {
                       margin={{ left: 48, right: 24, top: 16, bottom: 32 }}
                       grid={{ horizontal: true }}
                       hideLegend
+                      onItemClick={(_, item) => {
+                        const m = monthly[item.dataIndex]?.month;
+                        if (!m) return;
+                        const [my, mm] = m.split("-").map(Number);
+                        const lastDay = new Date(my!, mm!, 0).getDate();
+                        navigate(
+                          billsHref({
+                            dueAfter: `${m}-01`,
+                            dueBefore: `${m}-${String(lastDay).padStart(2, "0")}`,
+                          }),
+                        );
+                      }}
+                      sx={{ cursor: "pointer" }}
                     />
                   )}
                 </CardContent>
