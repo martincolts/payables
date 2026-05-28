@@ -103,13 +103,15 @@ function compactMoney(v: number): string {
   return `$${v}`;
 }
 
+const CHART_PRIMARY = "#3b82f6";
+
 const VENDOR_PALETTE = [
-  "#1976d2",
-  "#9c27b0",
-  "#2e7d32",
-  "#ed6c02",
-  "#0288d1",
-  "#7b1fa2",
+  "#3b82f6",
+  "#8b5cf6",
+  "#10b981",
+  "#f59e0b",
+  "#06b6d4",
+  "#ec4899",
 ];
 
 type MonthlyView = "total" | "perVendor";
@@ -303,17 +305,41 @@ export function Dashboard() {
   const monthValues = monthly.map((m) => Number(m.totalAmount));
   const monthCounts = monthly.map((m) => m.billCount);
 
-  const perVendorSeries = useMemo(() => {
+  const vendorSeriesAll = useMemo(() => {
     const series = stats?.monthlyByVendor ?? [];
     return series.map((s, i) => ({
+      vendorId: s.vendorId,
+      vendorName: s.vendorName,
+      color: VENDOR_PALETTE[i % VENDOR_PALETTE.length]!,
       data: s.points.map((p) => Number(p.totalAmount)),
-      label: s.vendorName,
-      color: VENDOR_PALETTE[i % VENDOR_PALETTE.length],
-      curve: "monotoneX" as const,
-      showMark: !isSm,
-      valueFormatter: (v: number | null) => (v == null ? "" : formatMoney(String(v))),
     }));
-  }, [stats, isSm]);
+  }, [stats]);
+
+  const [excludedVendorIds, setExcludedVendorIds] = useState<Set<string>>(new Set());
+
+  function toggleVendor(id: string) {
+    setExcludedVendorIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const perVendorSeries = useMemo(
+    () =>
+      vendorSeriesAll
+        .filter((v) => !excludedVendorIds.has(v.vendorId))
+        .map((v) => ({
+          data: v.data,
+          label: v.vendorName,
+          color: v.color,
+          curve: "monotoneX" as const,
+          showMark: !isSm,
+          valueFormatter: (val: number | null) => (val == null ? "" : formatMoney(String(val))),
+        })),
+    [vendorSeriesAll, excludedVendorIds, isSm],
+  );
 
   const chartHeight = isSm ? 240 : 320;
   const monthlyChartHeight = isSm ? 260 : 360;
@@ -402,7 +428,7 @@ export function Dashboard() {
                       series={[
                         {
                           data: vendorBars.values,
-                          color: theme.palette.primary.main,
+                          color: CHART_PRIMARY,
                           valueFormatter: (v) => (v == null ? "" : formatMoney(String(v))),
                           label: "Total billed",
                         },
@@ -494,13 +520,47 @@ export function Dashboard() {
                   sx={{ flexWrap: "wrap", gap: 1, "& .MuiCardHeader-action": { m: 0 } }}
                 />
                 <CardContent sx={{ pt: 0 }}>
+                  {monthlyView === "perVendor" && vendorSeriesAll.length > 0 && (
+                    <Stack
+                      direction="row"
+                      spacing={1}
+                      useFlexGap
+                      sx={{ flexWrap: "wrap", mb: 2 }}
+                    >
+                      {vendorSeriesAll.map((v) => {
+                        const active = !excludedVendorIds.has(v.vendorId);
+                        return (
+                          <Chip
+                            key={v.vendorId}
+                            label={truncate(v.vendorName, 22)}
+                            size="small"
+                            clickable
+                            variant={active ? "filled" : "outlined"}
+                            onClick={() => toggleVendor(v.vendorId)}
+                            sx={{
+                              borderColor: v.color,
+                              backgroundColor: active ? v.color : "transparent",
+                              color: active ? "#fff" : v.color,
+                              "&:hover": {
+                                backgroundColor: active ? v.color : `${v.color}22`,
+                              },
+                            }}
+                          />
+                        );
+                      })}
+                    </Stack>
+                  )}
                   {statsLoading ? (
                     <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
                       <CircularProgress size={28} aria-label="Loading monthly stats" />
                     </Box>
-                  ) : monthlyView === "perVendor" && perVendorSeries.length === 0 ? (
+                  ) : monthlyView === "perVendor" && vendorSeriesAll.length === 0 ? (
                     <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: "center" }}>
                       No vendor activity in this range.
+                    </Typography>
+                  ) : monthlyView === "perVendor" && perVendorSeries.length === 0 ? (
+                    <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: "center" }}>
+                      Select at least one vendor to display.
                     </Typography>
                   ) : (
                     <LineChart
@@ -523,7 +583,7 @@ export function Dashboard() {
                           ? [
                               {
                                 data: monthValues,
-                                color: theme.palette.primary.main,
+                                color: CHART_PRIMARY,
                                 area: true,
                                 showMark: !isSm,
                                 curve: "monotoneX",
@@ -582,7 +642,7 @@ export function Dashboard() {
                       series={[
                         {
                           data: monthCounts,
-                          color: theme.palette.secondary.main,
+                          color: CHART_PRIMARY,
                           label: "Bills",
                           valueFormatter: (v) => (v == null ? "" : String(v)),
                         },
