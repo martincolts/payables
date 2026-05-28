@@ -14,25 +14,26 @@ export const STATUS_LABELS: Record<BillStatus, string> = {
 };
 
 export function statusColor(theme: Theme, status: BillStatus): string {
-  const base = (() => {
-    switch (status) {
-      case "draft":
-        return theme.palette.grey[500];
-      case "pending_approval":
-        return theme.palette.warning.main;
-      case "approved":
-        return theme.palette.info.main;
-      case "rejected":
-        return theme.palette.error.main;
-      case "scheduled":
-        return theme.palette.secondary.main;
-      case "paid":
-        return theme.palette.success.main;
-      case "payment_failed":
-        return theme.palette.error.main;
-    }
-  })();
-  return alpha(base, CHART_ALPHA);
+  switch (status) {
+    case "draft":
+      return theme.palette.grey[500];
+    case "pending_approval":
+      return theme.palette.warning.main;
+    case "approved":
+      return theme.palette.info.main;
+    case "rejected":
+      return theme.palette.error.main;
+    case "scheduled":
+      return theme.palette.secondary.main;
+    case "paid":
+      return theme.palette.success.main;
+    case "payment_failed":
+      return theme.palette.error.main;
+  }
+}
+
+export function statusChartColor(theme: Theme, status: BillStatus): string {
+  return alpha(statusColor(theme, status), CHART_ALPHA);
 }
 
 export function formatMonthLabel(month: string): string {

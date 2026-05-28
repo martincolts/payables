@@ -390,7 +390,13 @@ async function seed() {
   };
 
   // Vendor creation entries — one per seeded vendor, attributed to the admin.
-  for (const v of vendorRows) {
+  // Backdated to just before the earliest bill so the audit trail reads in
+  // logical order: vendors were onboarded first, then bills started flowing.
+  const earliestIssue = new Date(today.getFullYear(), today.getMonth() - 23, 1);
+  const vendorSetupStart = new Date(earliestIssue);
+  vendorSetupStart.setUTCDate(vendorSetupStart.getUTCDate() - 1);
+  vendorSetupStart.setUTCHours(8, 0, 0, 0);
+  vendorRows.forEach((v, i) => {
     activityValues.push({
       organizationId: orgId,
       userId: admin.id,
@@ -398,9 +404,9 @@ async function seed() {
       entityType: "vendor",
       entityId: v.id,
       metadata: { name: v.name, paymentMethod: v.paymentMethod },
-      createdAt: v.createdAt,
+      createdAt: addHours(vendorSetupStart, i),
     });
-  }
+  });
 
   for (const bill of insertedBills) {
     const issuedAt = new Date(`${bill.issueDate}T09:00:00Z`);

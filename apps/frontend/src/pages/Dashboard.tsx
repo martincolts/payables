@@ -33,6 +33,7 @@ import {
   VENDOR_PALETTE,
   formatMonthLabel,
   statusColor,
+  statusChartColor,
   truncate,
 } from "../components/charts/chartHelpers";
 import { TopVendorsChart } from "../components/charts/TopVendorsChart";
@@ -453,7 +454,7 @@ export function Dashboard() {
       id: s.status,
       value: s.count,
       label: STATUS_LABELS[s.status],
-      color: statusColor(theme, s.status),
+      color: statusChartColor(theme, s.status),
     }));
   }, [stats, theme]);
 
@@ -496,7 +497,7 @@ export function Dashboard() {
     return selectedStatuses.map((s) => ({
       data: vendorBars.ids.map((id) => vendorStatusAmount.get(id)?.get(s) ?? 0),
       label: STATUS_LABELS[s],
-      color: statusColor(theme, s),
+      color: statusChartColor(theme, s),
       stack: "total",
       valueFormatter: (v: number | null) =>
         v == null || v === 0 ? "" : formatMoney(String(v)),
@@ -508,7 +509,7 @@ export function Dashboard() {
     return selectedStatuses.map((s) => ({
       data: monthly.map((m) => monthStatusBreakdown.get(m.month)?.get(s)?.amount ?? 0),
       label: STATUS_LABELS[s],
-      color: statusColor(theme, s),
+      color: statusChartColor(theme, s),
       area: true,
       stack: "total",
       curve: "monotoneX" as const,
@@ -523,7 +524,7 @@ export function Dashboard() {
     return selectedStatuses.map((s) => ({
       data: monthly.map((m) => monthStatusBreakdown.get(m.month)?.get(s)?.count ?? 0),
       label: STATUS_LABELS[s],
-      color: statusColor(theme, s),
+      color: statusChartColor(theme, s),
       stack: "total",
       valueFormatter: (v: number | null) => (v == null || v === 0 ? "" : String(v)),
     }));
