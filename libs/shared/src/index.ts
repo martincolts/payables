@@ -7,3 +7,4 @@ export * from "./approval.js";
 export * from "./vendor.js";
 export * from "./bill.js";
 export * from "./activity.js";
+export * from "./stats.js";

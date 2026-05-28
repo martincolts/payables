@@ -8,6 +8,7 @@
     "@emotion/styled": "^11.14.0",
     "@mui/icons-material": "^9.0.1",
     "@mui/material": "^9.0.1",
+    "@mui/x-charts": "^9.3.0",
     "@payables/backend": "workspace:*",
     "@payables/shared": "workspace:*",
     "@tanstack/react-query": "^5.100.14",

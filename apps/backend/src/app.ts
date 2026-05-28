@@ -26,6 +26,9 @@ import { createOrganizationRoutes } from "./routes/organizationRoutes.js";
 import { createActivityLogRepo } from "./repositories/activityLogRepo.js";
 import { createActivityLogService } from "./services/activityLogService.js";
 import { createActivityLogRoutes } from "./routes/activityLogRoutes.js";
+import { createStatsRepo } from "./repositories/statsRepo.js";
+import { createStatsService } from "./services/statsService.js";
+import { createStatsRoutes } from "./routes/statsRoutes.js";
 
 /**
  * Wires dependencies and builds the Hono app. The returned app's type is
@@ -46,6 +49,7 @@ export function createApp(config: Config, db: DB) {
   );
   const organizationService = createOrganizationService(orgRepo, userRepo);
   const activityLogService = createActivityLogService(createActivityLogRepo(db));
+  const statsService = createStatsService(createStatsRepo(db));
 
   const app = new Hono<AuthEnv>();
 
@@ -66,7 +70,8 @@ export function createApp(config: Config, db: DB) {
     .route("/invitations", createInvitationRoutes(invitationService))
     .route("/vendors", createVendorRoutes(vendorService))
     .route("/bills", createBillRoutes(billService, approvalService))
-    .route("/activity-log", createActivityLogRoutes(activityLogService));
+    .route("/activity-log", createActivityLogRoutes(activityLogService))
+    .route("/stats", createStatsRoutes(statsService));
 
   app.onError((err, c) => {
     if (err instanceof DomainError) {
