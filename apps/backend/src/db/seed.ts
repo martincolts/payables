@@ -1,14 +1,15 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { loadConfig } from "../config.js";
 import { createDb } from "./client.js";
 import { bills, organizations, users, vendors } from "./schema/index.js";
 import { hashPassword } from "../lib/password.js";
 
 /**
- * Seeds demo data: an organization, a demo admin + approver, vendors, and a
- * spread of bills across statuses (including one overdue) so the Bills table
- * and Dashboard metrics are populated. The org requires 2 approvals so the
- * quorum flow is exercisable. Run with: pnpm nx run backend:seed
+ * Seeds demo data: an organization, a demo admin + a few approvers, vendors, and
+ * a spread of bills across all statuses spanning the last 8 months (including
+ * overdue ones) so the Bills table and Dashboard metrics are well populated. The
+ * org requires 2 approvals so the quorum flow is exercisable.
+ * Run with: pnpm nx run backend:seed
  */
 async function seed() {
   const config = loadConfig();
@@ -30,8 +31,11 @@ async function seed() {
     orgId = org!.id;
 
     const passwordHash = await hashPassword("password123");
-    // Demo admin — log in with admin@payables.com / password123.
-    // Demo approver — log in with approver@payables.com / password123.
+    // Demo logins (all use password123):
+    //   admin@payables.com       (admin)
+    //   approver@payables.com    (approver)
+    //   approver2@payables.com   (approver)
+    //   approver3@payables.com   (approver)
     await db.insert(users).values([
       {
         organizationId: orgId,
@@ -43,8 +47,24 @@ async function seed() {
       },
       {
         organizationId: orgId,
-        name: "Approver Demo",
+        name: "Alice Approver",
         email: "approver@payables.com",
+        passwordHash,
+        role: "approver",
+        status: "active",
+      },
+      {
+        organizationId: orgId,
+        name: "Bob Approver",
+        email: "approver2@payables.com",
+        passwordHash,
+        role: "approver",
+        status: "active",
+      },
+      {
+        organizationId: orgId,
+        name: "Carol Approver",
+        email: "approver3@payables.com",
         passwordHash,
         role: "approver",
         status: "active",
@@ -63,75 +83,78 @@ async function seed() {
     ])
     .onConflictDoNothing();
 
-  const [admin] = await db.select().from(users).where(eq(users.organizationId, orgId)).limit(1);
+  const [admin] = await db
+    .select()
+    .from(users)
+    .where(and(eq(users.organizationId, orgId), eq(users.role, "admin")))
+    .limit(1);
   const vendorRows = await db.select().from(vendors).where(eq(vendors.organizationId, orgId));
   if (!admin || vendorRows.length === 0) {
-    console.warn("Skipping bill seed: missing user or vendors.");
+    console.warn("Skipping bill seed: missing admin user or vendors.");
     await pool.end();
     return;
   }
 
-  const vendorByName = new Map(vendorRows.map((v) => [v.name, v.id]));
+  // Avoid piling up duplicate bills on reseed (bills have no natural unique key,
+  // so onConflictDoNothing can't dedupe them).
+  const existingBills = await db
+    .select({ id: bills.id })
+    .from(bills)
+    .where(eq(bills.organizationId, orgId))
+    .limit(1);
+  if (existingBills.length > 0) {
+    console.log("Bills already seeded for this org — skipping bill seed.");
+    await pool.end();
+    return;
+  }
+
   const iso = (d: Date) => d.toISOString().slice(0, 10);
   const daysFromNow = (n: number) => iso(new Date(Date.now() + n * 86_400_000));
 
-  await db
-    .insert(bills)
-    .values([
-      {
-        organizationId: orgId,
-        vendorId: vendorByName.get("Amazon Web Services")!,
-        invoiceNumber: "AWS-2024-001",
-        amount: "1250.00",
-        issueDate: daysFromNow(-40),
-        dueDate: daysFromNow(-5), // overdue
-        status: "pending_approval",
-        createdBy: admin.id,
-      },
-      {
-        organizationId: orgId,
-        vendorId: vendorByName.get("Stripe")!,
-        invoiceNumber: "STR-9981",
-        amount: "499.99",
-        issueDate: daysFromNow(-10),
-        dueDate: daysFromNow(4),
-        status: "approved",
-        createdBy: admin.id,
-      },
-      {
-        organizationId: orgId,
-        vendorId: vendorByName.get("Figma")!,
-        invoiceNumber: "FIG-2024-07",
-        amount: "144.00",
-        issueDate: daysFromNow(-3),
-        dueDate: daysFromNow(20),
-        status: "draft",
-        createdBy: admin.id,
-      },
-      {
-        organizationId: orgId,
-        vendorId: vendorByName.get("WeWork")!,
-        invoiceNumber: "WW-Q3",
-        amount: "8200.00",
-        issueDate: daysFromNow(-15),
-        dueDate: daysFromNow(10),
-        status: "scheduled",
-        createdBy: admin.id,
-      },
-      {
-        organizationId: orgId,
-        vendorId: vendorByName.get("Notion")!,
-        invoiceNumber: "NOT-555",
-        amount: "96.00",
-        issueDate: daysFromNow(-60),
-        dueDate: daysFromNow(-30),
-        status: "paid",
-        createdBy: admin.id,
-      },
-    ])
-    .onConflictDoNothing();
+  const vendorIds = vendorRows.map((v) => v.id);
+  const statuses = ["draft", "pending_approval", "approved", "rejected", "scheduled", "paid"] as const;
 
-  console.log("Seed complete.");
+  // Generate ~5 bills per month for the last 8 months so the Bills table and
+  // Dashboard charts have meaningful history. Statuses skew with age: recent
+  // months stay in earlier lifecycle states, older months are mostly paid.
+  const billValues: (typeof bills.$inferInsert)[] = [];
+  for (let monthsAgo = 0; monthsAgo < 8; monthsAgo++) {
+    const billsThisMonth = 5;
+    for (let i = 0; i < billsThisMonth; i++) {
+      const vendorId = vendorIds[(monthsAgo * billsThisMonth + i) % vendorIds.length]!;
+      // Spread issue dates across the month, then derive a 30-day due date.
+      const issueOffset = -(monthsAgo * 30 + i * 5 + 2);
+      const dueOffset = issueOffset + 30;
+
+      let status: (typeof statuses)[number];
+      if (monthsAgo >= 3) {
+        // Older bills are settled (paid) or were rejected.
+        status = i % 4 === 0 ? "rejected" : "paid";
+      } else if (monthsAgo === 0) {
+        // This month: a live mix across the early lifecycle.
+        status = statuses[i % statuses.length]!;
+      } else {
+        // Recent months: mostly approved/scheduled, some paid.
+        status = ["approved", "scheduled", "paid", "scheduled", "approved"][i]! as (typeof statuses)[number];
+      }
+
+      const amount = (50 + ((monthsAgo * 137 + i * 311) % 9950)).toFixed(2);
+      billValues.push({
+        organizationId: orgId,
+        vendorId,
+        invoiceNumber: `INV-${iso(new Date()).slice(0, 4)}-${monthsAgo}${i}`,
+        amount,
+        issueDate: daysFromNow(issueOffset),
+        dueDate: daysFromNow(dueOffset),
+        status,
+        createdBy: admin.id,
+      });
+    }
+  }
+
+  await db.insert(bills).values(billValues);
+
+  console.log(`Seed complete: inserted ${billValues.length} bills.`);
   await pool.end();
 }
 
