@@ -194,20 +194,28 @@ export function Bills() {
         )}
       </Stack>
 
-      <Stack
-        direction={{ xs: "column", sm: "row" }}
-        spacing={2}
-        useFlexGap
-        sx={{ mb: 2, flexWrap: "wrap" }}
+      <Box
+        sx={{
+          mb: 2,
+          display: "grid",
+          gap: 2,
+          alignItems: "center",
+          gridTemplateColumns: {
+            xs: "1fr",
+            sm: "repeat(2, minmax(0, 1fr))",
+            md: "repeat(3, minmax(0, 1fr))",
+            lg: "2fr repeat(4, minmax(0, 1fr)) auto",
+          },
+        }}
       >
         <TextField
           label="Search by vendor or invoice number"
           value={search}
           onChange={(e) => updateParams({ search: e.target.value }, { resetPage: true })}
           size="small"
-          sx={{ flexGrow: 1, minWidth: { xs: "100%", sm: 220 } }}
+          sx={{ gridColumn: { xs: "1 / -1", md: "1 / -1", lg: "auto" } }}
         />
-        <FormControl size="small" sx={{ minWidth: { xs: "100%", sm: 180 } }} disabled={overdue}>
+        <FormControl size="small" disabled={overdue}>
           <InputLabel id="status-filter-label">Status</InputLabel>
           <Select
             labelId="status-filter-label"
@@ -223,7 +231,7 @@ export function Bills() {
             ))}
           </Select>
         </FormControl>
-        <FormControl size="small" sx={{ minWidth: { xs: "100%", sm: 180 } }}>
+        <FormControl size="small">
           <InputLabel id="vendor-filter-label">Vendor</InputLabel>
           <Select
             labelId="vendor-filter-label"
@@ -243,6 +251,7 @@ export function Bills() {
           label="Due date"
           from={dueAfter}
           to={dueBefore}
+          minWidth={0}
           onChange={({ from, to }) =>
             updateParams({ dueAfter: from, dueBefore: to }, { resetPage: true })
           }
@@ -251,11 +260,13 @@ export function Bills() {
           label="Issue date"
           from={issueAfter}
           to={issueBefore}
+          minWidth={0}
           onChange={({ from, to }) =>
             updateParams({ issueAfter: from, issueBefore: to }, { resetPage: true })
           }
         />
         <FormControlLabel
+          sx={{ justifySelf: { xs: "start", lg: "end" }, mr: 0 }}
           control={
             <Checkbox
               checked={overdue}
@@ -269,7 +280,7 @@ export function Bills() {
           }
           label="Overdue only"
         />
-      </Stack>
+      </Box>
 
       {isLoading ? (
         <Box sx={{ display: "flex", justifyContent: "center", p: 4 }}>
