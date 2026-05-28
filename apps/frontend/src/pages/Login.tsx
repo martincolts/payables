@@ -49,9 +49,18 @@ export function Login() {
     >
       <Card sx={{ width: "100%", maxWidth: 400 }}>
         <CardContent>
-          <Typography variant="h5" component="h1" gutterBottom>
-            Payables
-          </Typography>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 1 }}>
+            <Box
+              component="img"
+              src="/logo.svg"
+              alt=""
+              aria-hidden
+              sx={{ width: 40, height: 40, display: "block" }}
+            />
+            <Typography variant="h5" component="h1" sx={{ fontWeight: 700 }}>
+              Payables
+            </Typography>
+          </Box>
           <Typography color="text.secondary" sx={{ mb: 3 }}>
             Sign in to continue.
           </Typography>

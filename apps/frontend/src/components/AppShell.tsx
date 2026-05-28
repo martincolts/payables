@@ -50,7 +50,14 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const drawerContent = (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <Toolbar>
+      <Toolbar sx={{ gap: 1.25 }}>
+        <Box
+          component="img"
+          src="/logo.svg"
+          alt=""
+          aria-hidden
+          sx={{ width: 32, height: 32, display: "block" }}
+        />
         <Typography variant="h6" noWrap component="div" sx={{ fontWeight: 700 }}>
           Payables
         </Typography>
@@ -115,6 +122,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           >
             <MenuIcon />
           </IconButton>
+          <Box
+            component="img"
+            src="/logo.svg"
+            alt=""
+            aria-hidden
+            sx={{ width: 28, height: 28, mr: 1, display: "block" }}
+          />
           <Typography variant="h6" noWrap component="div">
             Payables
           </Typography>
