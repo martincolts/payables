@@ -4,7 +4,6 @@ import {
   Button,
   Card,
   CardContent,
-  CardHeader,
   Chip,
   CircularProgress,
   Grid,
@@ -14,12 +13,8 @@ import {
   Typography,
   useMediaQuery,
   useTheme,
-  type Theme,
 } from "@mui/material";
 import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
-import { BarChart } from "@mui/x-charts/BarChart";
-import { LineChart } from "@mui/x-charts/LineChart";
-import { PieChart } from "@mui/x-charts/PieChart";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import {
@@ -33,6 +28,17 @@ import {
 } from "@payables/shared";
 import { useDashboardStats, type StatsWindow } from "../queries/useDashboardStats";
 import { formatMoney } from "../lib/format";
+import {
+  STATUS_LABELS,
+  VENDOR_PALETTE,
+  formatMonthLabel,
+  statusColor,
+  truncate,
+} from "../components/charts/chartHelpers";
+import { TopVendorsChart } from "../components/charts/TopVendorsChart";
+import { BillsByStatusChart } from "../components/charts/BillsByStatusChart";
+import { MonthlyCostTrendChart } from "../components/charts/MonthlyCostTrendChart";
+import { BillVolumeChart } from "../components/charts/BillVolumeChart";
 
 function MetricCard({
   label,
@@ -190,43 +196,6 @@ function billsHref(params: Record<string, string | undefined>): string {
   return `/bills?${sp.toString()}`;
 }
 
-const STATUS_LABELS: Record<BillStatus, string> = {
-  draft: "Draft",
-  pending_approval: "Pending approval",
-  approved: "Approved",
-  rejected: "Rejected",
-  scheduled: "Scheduled",
-  paid: "Paid",
-  payment_failed: "Payment failed",
-};
-
-function statusColor(theme: Theme, status: BillStatus): string {
-  switch (status) {
-    case "draft":
-      return theme.palette.grey[500];
-    case "pending_approval":
-      return theme.palette.warning.main;
-    case "approved":
-      return theme.palette.info.main;
-    case "rejected":
-      return theme.palette.error.main;
-    case "scheduled":
-      return theme.palette.secondary.main;
-    case "paid":
-      return theme.palette.success.main;
-    case "payment_failed":
-      return theme.palette.error.main;
-  }
-}
-
-function formatMonthLabel(month: string): string {
-  const [y, m] = month.split("-").map(Number);
-  return new Date(y!, m! - 1, 1).toLocaleString("en-US", {
-    month: "short",
-    year: "2-digit",
-  });
-}
-
 function formatMonthLong(month: MonthKey): string {
   const [y, m] = month.split("-").map(Number);
   return new Date(y!, m! - 1, 1).toLocaleString("en-US", {
@@ -234,29 +203,6 @@ function formatMonthLong(month: MonthKey): string {
     year: "numeric",
   });
 }
-
-function truncate(s: string, max: number): string {
-  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
-}
-
-function compactMoney(v: number): string {
-  if (Math.abs(v) >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
-  if (Math.abs(v) >= 1_000) return `$${(v / 1_000).toFixed(0)}k`;
-  return `$${v}`;
-}
-
-const CHART_PRIMARY = "#3b82f6";
-
-const VENDOR_PALETTE = [
-  "#3b82f6",
-  "#8b5cf6",
-  "#10b981",
-  "#f59e0b",
-  "#06b6d4",
-  "#ec4899",
-];
-
-type MonthlyView = "total" | "perVendor";
 
 type PresetId = "3m" | "6m" | "12m" | "24m" | "ytd";
 
@@ -408,12 +354,12 @@ function RangePicker({
 export function Dashboard() {
   const theme = useTheme();
   const isSm = useMediaQuery(theme.breakpoints.down("sm"));
+  const navigate = useNavigate();
 
   const [window, setWindow] = useState<StatsWindow>(() => {
     const d = defaultStatsWindow();
     return { from: d.from, to: d.to };
   });
-  const [monthlyView, setMonthlyView] = useState<MonthlyView>("total");
   const [selectedStatuses, setSelectedStatuses] = useState<BillStatus[]>([]);
   const hasStatusFilter = selectedStatuses.length > 0;
   const { data: stats, isLoading: statsLoading, isError: statsError } =
@@ -449,12 +395,8 @@ export function Dashboard() {
     return { rows, total };
   }, [stats, hasStatusFilter, selectedStatuses, theme]);
   const outstanding = String(outstandingBreakdown.total);
-  const pendingCount = summary?.pendingApprovalCount ?? 0;
-  const paidCount = stats?.byStatus.find((s) => s.status === "paid")?.count ?? 0;
-  const failedCount = stats?.byStatus.find((s) => s.status === "payment_failed")?.count ?? 0;
   const totalBillsCount = (stats?.byStatus ?? []).reduce((acc, s) => acc + s.count, 0);
   const dateRange = windowToDateRange(window);
-  const navigate = useNavigate();
   const countByStatus = useMemo(() => {
     const m = new Map<BillStatus, number>();
     for (const s of stats?.byStatus ?? []) m.set(s.status, s.count);
@@ -592,32 +534,6 @@ export function Dashboard() {
     }));
   }, [stats]);
 
-  const [excludedVendorIds, setExcludedVendorIds] = useState<Set<string>>(new Set());
-
-  function toggleVendor(id: string) {
-    setExcludedVendorIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  const perVendorSeries = useMemo(
-    () =>
-      vendorSeriesAll
-        .filter((v) => !excludedVendorIds.has(v.vendorId))
-        .map((v) => ({
-          data: v.data,
-          label: v.vendorName,
-          color: v.color,
-          curve: "monotoneX" as const,
-          showMark: !isSm,
-          valueFormatter: (val: number | null) => (val == null ? "" : formatMoney(String(val))),
-        })),
-    [vendorSeriesAll, excludedVendorIds, isSm],
-  );
-
   const chartHeight = isSm ? 240 : 320;
   const monthlyChartHeight = isSm ? 260 : 360;
   const rangeSubtitle = windowLabel(window);
@@ -707,319 +623,68 @@ export function Dashboard() {
 
           <Grid container spacing={2} sx={{ mb: 3 }}>
             <Grid size={{ xs: 12, md: 6 }}>
-              <Card variant="outlined" sx={{ height: "100%" }}>
-                <CardHeader
-                  title="Top vendors by amount"
-                  subheader={rangeSubtitle}
-                  titleTypographyProps={{ variant: "subtitle1", fontWeight: 600 }}
-                  subheaderTypographyProps={{ variant: "caption" }}
-                />
-                <CardContent sx={{ pt: 0 }}>
-                  {statsLoading ? (
-                    <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
-                      <CircularProgress size={28} aria-label="Loading vendor stats" />
-                    </Box>
-                  ) : vendorBars.values.length === 0 ? (
-                    <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: "center" }}>
-                      No bills in this range.
-                    </Typography>
-                  ) : (
-                    <BarChart
-                      height={chartHeight}
-                      layout="horizontal"
-                      yAxis={[
-                        {
-                          data: vendorBars.names,
-                          scaleType: "band",
-                          tickLabelStyle: { fontSize: isSm ? 10 : 12 },
-                        },
-                      ]}
-                      xAxis={[
-                        {
-                          valueFormatter: compactMoney,
-                          tickLabelStyle: { fontSize: 11 },
-                        },
-                      ]}
-                      series={
-                        hasStatusFilter
-                          ? vendorStatusBarSeries
-                          : [
-                              {
-                                data: vendorBars.values,
-                                color: CHART_PRIMARY,
-                                valueFormatter: (v) =>
-                                  v == null ? "" : formatMoney(String(v)),
-                                label: "Total billed",
-                              },
-                            ]
-                      }
-                      borderRadius={4}
-                      margin={{ left: isSm ? 90 : 130, right: 24, top: 16, bottom: hasStatusFilter ? 56 : 32 }}
-                      hideLegend={!hasStatusFilter}
-                      slotProps={{
-                        legend: {
-                          direction: "horizontal",
-                          position: { vertical: "bottom", horizontal: "center" },
-                          sx: { fontSize: 11 },
-                        },
-                      }}
-                      grid={{ vertical: true }}
-                      onItemClick={(_, item) => {
-                        const id = vendorBars.ids[item.dataIndex];
-                        if (!id) return;
-                        navigate(billsHref({ vendorId: id, ...dateRange }));
-                      }}
-                      sx={{ cursor: "pointer" }}
-                    />
-                  )}
-                </CardContent>
-              </Card>
+              <TopVendorsChart
+                loading={statsLoading}
+                isSm={isSm}
+                height={chartHeight}
+                subheader={rangeSubtitle}
+                vendorBars={vendorBars}
+                hasStatusFilter={hasStatusFilter}
+                statusBarSeries={vendorStatusBarSeries}
+                onVendorClick={(id) => navigate(billsHref({ vendorId: id, ...dateRange }))}
+              />
             </Grid>
 
             <Grid size={{ xs: 12, md: 6 }}>
-              <Card variant="outlined" sx={{ height: "100%" }}>
-                <CardHeader
-                  title="Bills by status"
-                  subheader={rangeSubtitle}
-                  titleTypographyProps={{ variant: "subtitle1", fontWeight: 600 }}
-                  subheaderTypographyProps={{ variant: "caption" }}
-                />
-                <CardContent sx={{ pt: 0 }}>
-                  {statsLoading ? (
-                    <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
-                      <CircularProgress size={28} aria-label="Loading status stats" />
-                    </Box>
-                  ) : statusSlices.length === 0 ? (
-                    <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: "center" }}>
-                      No bills in this range.
-                    </Typography>
-                  ) : (
-                    <PieChart
-                      height={chartHeight}
-                      series={[
-                        {
-                          data: statusSlices,
-                          innerRadius: isSm ? 48 : 64,
-                          outerRadius: isSm ? 96 : 120,
-                          paddingAngle: 2,
-                          cornerRadius: 6,
-                          arcLabel: (item) => String(item.value),
-                          arcLabelMinAngle: 18,
-                          highlightScope: { fade: "global", highlight: "item" },
-                        },
-                      ]}
-                      slotProps={{
-                        legend: { direction: "horizontal", sx: { fontSize: 12 } },
-                      }}
-                      hideLegend={isSm}
-                      margin={{ top: 8, bottom: 48, left: 8, right: 8 }}
-                      onItemClick={(_, item) => {
-                        const slice = statusSlices[item.dataIndex];
-                        if (!slice) return;
-                        navigate(billsHref({ status: slice.id, ...dateRange }));
-                      }}
-                      sx={{ cursor: "pointer" }}
-                    />
-                  )}
-                </CardContent>
-              </Card>
+              <BillsByStatusChart
+                loading={statsLoading}
+                isSm={isSm}
+                height={chartHeight}
+                subheader={rangeSubtitle}
+                statusSlices={statusSlices}
+                onStatusClick={(status) =>
+                  navigate(billsHref({ status, ...dateRange }))
+                }
+              />
             </Grid>
 
             <Grid size={{ xs: 12 }}>
-              <Card variant="outlined">
-                <CardHeader
-                  title="Monthly cost trend"
-                  subheader={
-                    monthlyView === "total"
-                      ? `Total — ${rangeSubtitle}`
-                      : `Top vendors — ${rangeSubtitle}`
-                  }
-                  titleTypographyProps={{ variant: "subtitle1", fontWeight: 600 }}
-                  subheaderTypographyProps={{ variant: "caption" }}
-                  action={
-                    <Stack direction="row" spacing={1}>
-                      <Chip
-                        label="Total"
-                        size="small"
-                        color={monthlyView === "total" ? "primary" : "default"}
-                        variant={monthlyView === "total" ? "filled" : "outlined"}
-                        onClick={() => setMonthlyView("total")}
-                        clickable
-                      />
-                      <Chip
-                        label="Per vendor"
-                        size="small"
-                        color={monthlyView === "perVendor" ? "primary" : "default"}
-                        variant={monthlyView === "perVendor" ? "filled" : "outlined"}
-                        onClick={() => setMonthlyView("perVendor")}
-                        clickable
-                      />
-                    </Stack>
-                  }
-                  sx={{ flexWrap: "wrap", gap: 1, "& .MuiCardHeader-action": { m: 0 } }}
-                />
-                <CardContent sx={{ pt: 0 }}>
-                  {monthlyView === "perVendor" && vendorSeriesAll.length > 0 && (
-                    <Stack
-                      direction="row"
-                      spacing={1}
-                      useFlexGap
-                      sx={{ flexWrap: "wrap", mb: 2 }}
-                    >
-                      {vendorSeriesAll.map((v) => {
-                        const active = !excludedVendorIds.has(v.vendorId);
-                        return (
-                          <Chip
-                            key={v.vendorId}
-                            label={truncate(v.vendorName, 22)}
-                            size="small"
-                            clickable
-                            variant={active ? "filled" : "outlined"}
-                            onClick={() => toggleVendor(v.vendorId)}
-                            sx={{
-                              borderColor: v.color,
-                              backgroundColor: active ? v.color : "transparent",
-                              color: active ? "#fff" : v.color,
-                              "&:hover": {
-                                backgroundColor: active ? v.color : `${v.color}22`,
-                              },
-                            }}
-                          />
-                        );
-                      })}
-                    </Stack>
-                  )}
-                  {statsLoading ? (
-                    <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
-                      <CircularProgress size={28} aria-label="Loading monthly stats" />
-                    </Box>
-                  ) : monthlyView === "perVendor" && vendorSeriesAll.length === 0 ? (
-                    <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: "center" }}>
-                      No vendor activity in this range.
-                    </Typography>
-                  ) : monthlyView === "perVendor" && perVendorSeries.length === 0 ? (
-                    <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: "center" }}>
-                      Select at least one vendor to display.
-                    </Typography>
-                  ) : (
-                    <LineChart
-                      height={monthlyChartHeight}
-                      xAxis={[
-                        {
-                          data: monthLabels,
-                          scaleType: "point",
-                          tickLabelStyle: isSm ? { fontSize: 10 } : { fontSize: 12 },
-                        },
-                      ]}
-                      yAxis={[
-                        {
-                          valueFormatter: compactMoney,
-                          tickLabelStyle: { fontSize: 11 },
-                        },
-                      ]}
-                      series={
-                        monthlyView === "total"
-                          ? hasStatusFilter
-                            ? monthlyAmountByStatusSeries
-                            : [
-                                {
-                                  data: monthValues,
-                                  color: CHART_PRIMARY,
-                                  area: true,
-                                  showMark: !isSm,
-                                  curve: "monotoneX",
-                                  valueFormatter: (v) =>
-                                    v == null ? "" : formatMoney(String(v)),
-                                  label: "Total billed",
-                                },
-                              ]
-                          : perVendorSeries
-                      }
-                      margin={{ left: 64, right: 24, top: 16, bottom: 32 }}
-                      grid={{ horizontal: true }}
-                      hideLegend={monthlyView === "total" && !hasStatusFilter}
-                      slotProps={{
-                        legend: {
-                          direction: "horizontal",
-                          position: { vertical: "bottom", horizontal: "center" },
-                          sx: { fontSize: 12 },
-                        },
-                      }}
-                    />
-                  )}
-                </CardContent>
-              </Card>
+              <MonthlyCostTrendChart
+                loading={statsLoading}
+                isSm={isSm}
+                height={monthlyChartHeight}
+                rangeSubtitle={rangeSubtitle}
+                monthLabels={monthLabels}
+                monthValues={monthValues}
+                hasStatusFilter={hasStatusFilter}
+                amountByStatusSeries={monthlyAmountByStatusSeries}
+                vendorSeriesAll={vendorSeriesAll}
+              />
             </Grid>
 
             <Grid size={{ xs: 12 }}>
-              <Card variant="outlined">
-                <CardHeader
-                  title="Bill volume per month"
-                  subheader={`Number of bills issued — ${rangeSubtitle}`}
-                  titleTypographyProps={{ variant: "subtitle1", fontWeight: 600 }}
-                  subheaderTypographyProps={{ variant: "caption" }}
-                />
-                <CardContent sx={{ pt: 0 }}>
-                  {statsLoading ? (
-                    <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
-                      <CircularProgress size={28} aria-label="Loading volume stats" />
-                    </Box>
-                  ) : (
-                    <BarChart
-                      height={chartHeight}
-                      xAxis={[
-                        {
-                          data: monthLabels,
-                          scaleType: "band",
-                          tickLabelStyle: isSm ? { fontSize: 10 } : { fontSize: 12 },
-                        },
-                      ]}
-                      yAxis={[
-                        {
-                          tickLabelStyle: { fontSize: 11 },
-                          valueFormatter: (v: number) => String(Math.round(v)),
-                        },
-                      ]}
-                      series={
-                        hasStatusFilter
-                          ? monthlyCountByStatusSeries
-                          : [
-                              {
-                                data: monthCounts,
-                                color: CHART_PRIMARY,
-                                label: "Bills",
-                                valueFormatter: (v) => (v == null ? "" : String(v)),
-                              },
-                            ]
-                      }
-                      borderRadius={4}
-                      margin={{ left: 48, right: 24, top: 16, bottom: hasStatusFilter ? 56 : 32 }}
-                      grid={{ horizontal: true }}
-                      hideLegend={!hasStatusFilter}
-                      slotProps={{
-                        legend: {
-                          direction: "horizontal",
-                          position: { vertical: "bottom", horizontal: "center" },
-                          sx: { fontSize: 11 },
-                        },
-                      }}
-                      onItemClick={(_, item) => {
-                        const m = monthly[item.dataIndex]?.month;
-                        if (!m) return;
-                        const [my, mm] = m.split("-").map(Number);
-                        const lastDay = new Date(my!, mm!, 0).getDate();
-                        navigate(
-                          billsHref({
-                            issueAfter: `${m}-01`,
-                            issueBefore: `${m}-${String(lastDay).padStart(2, "0")}`,
-                          }),
-                        );
-                      }}
-                      sx={{ cursor: "pointer" }}
-                    />
-                  )}
-                </CardContent>
-              </Card>
+              <BillVolumeChart
+                loading={statsLoading}
+                isSm={isSm}
+                height={chartHeight}
+                rangeSubtitle={rangeSubtitle}
+                monthLabels={monthLabels}
+                monthCounts={monthCounts}
+                hasStatusFilter={hasStatusFilter}
+                countByStatusSeries={monthlyCountByStatusSeries}
+                onMonthClick={(idx) => {
+                  const m = monthly[idx]?.month;
+                  if (!m) return;
+                  const [my, mm] = m.split("-").map(Number);
+                  const lastDay = new Date(my!, mm!, 0).getDate();
+                  navigate(
+                    billsHref({
+                      issueAfter: `${m}-01`,
+                      issueBefore: `${m}-${String(lastDay).padStart(2, "0")}`,
+                    }),
+                  );
+                }}
+              />
             </Grid>
           </Grid>
 
