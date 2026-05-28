@@ -20,7 +20,7 @@ import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 import { BarChart } from "@mui/x-charts/BarChart";
 import { LineChart } from "@mui/x-charts/LineChart";
 import { PieChart } from "@mui/x-charts/PieChart";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import {
   addMonths,
@@ -33,9 +33,29 @@ import {
 import { useDashboardStats, type StatsWindow } from "../queries/useDashboardStats";
 import { formatMoney } from "../lib/format";
 
-function MetricCard({ label, value, color }: { label: string; value: string; color?: string }) {
-  return (
-    <Card variant="outlined" sx={{ height: "100%" }}>
+function MetricCard({
+  label,
+  value,
+  color,
+  to,
+}: {
+  label: string;
+  value: string;
+  color?: string;
+  to?: string;
+}) {
+  const card = (
+    <Card
+      variant="outlined"
+      sx={{
+        height: "100%",
+        ...(to && {
+          cursor: "pointer",
+          transition: "box-shadow 0.15s, border-color 0.15s",
+          "&:hover": { boxShadow: 2, borderColor: "primary.main" },
+        }),
+      }}
+    >
       <CardContent>
         <Typography variant="overline" color="text.secondary">
           {label}
@@ -46,6 +66,26 @@ function MetricCard({ label, value, color }: { label: string; value: string; col
       </CardContent>
     </Card>
   );
+  if (!to) return card;
+  return (
+    <Link to={to} style={{ textDecoration: "none", color: "inherit", display: "block", height: "100%" }}>
+      {card}
+    </Link>
+  );
+}
+
+function windowToDateRange(w: StatsWindow): { dueAfter: string; dueBefore: string } {
+  const [ty, tm] = w.to.split("-").map(Number);
+  const dueAfter = `${w.from}-01`;
+  const lastDay = new Date(ty!, tm!, 0).getDate();
+  const dueBefore = `${w.to}-${String(lastDay).padStart(2, "0")}`;
+  return { dueAfter, dueBefore };
+}
+
+function billsHref(params: Record<string, string | undefined>): string {
+  const sp = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) if (v) sp.set(k, v);
+  return `/bills?${sp.toString()}`;
 }
 
 const STATUS_LABELS: Record<BillStatus, string> = {
@@ -282,6 +322,10 @@ export function Dashboard() {
   const outstanding = summary?.totalOutstanding ?? "0";
   const overdueCount = summary?.overdueCount ?? 0;
   const pendingCount = summary?.pendingApprovalCount ?? 0;
+  const paidCount = stats?.byStatus.find((s) => s.status === "paid")?.count ?? 0;
+  const failedCount = stats?.byStatus.find((s) => s.status === "payment_failed")?.count ?? 0;
+  const dateRange = windowToDateRange(window);
+  const navigate = useNavigate();
 
   const vendorBars = useMemo(() => {
     const items = [...(stats?.topVendors ?? [])].reverse();
@@ -375,18 +419,38 @@ export function Dashboard() {
       ) : (
         <>
           <Grid container spacing={2} sx={{ mb: 3 }}>
-            <Grid size={{ xs: 12, sm: 4 }}>
+            <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
               <MetricCard label="Total outstanding" value={formatMoney(outstanding)} />
             </Grid>
-            <Grid size={{ xs: 12, sm: 4 }}>
+            <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
               <MetricCard
                 label="Overdue"
                 value={String(overdueCount)}
                 color={overdueCount > 0 ? "error.main" : undefined}
+                to={billsHref({ overdue: "true", ...dateRange })}
               />
             </Grid>
-            <Grid size={{ xs: 12, sm: 4 }}>
-              <MetricCard label="Pending approval" value={String(pendingCount)} />
+            <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
+              <MetricCard
+                label="Pending approval"
+                value={String(pendingCount)}
+                to={billsHref({ status: "pending_approval", ...dateRange })}
+              />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
+              <MetricCard
+                label="Paid"
+                value={String(paidCount)}
+                to={billsHref({ status: "paid", ...dateRange })}
+              />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
+              <MetricCard
+                label="Payment failed"
+                value={String(failedCount)}
+                color={failedCount > 0 ? "error.main" : undefined}
+                to={billsHref({ status: "payment_failed", ...dateRange })}
+              />
             </Grid>
           </Grid>
 
@@ -480,6 +544,12 @@ export function Dashboard() {
                       }}
                       hideLegend={isSm}
                       margin={{ top: 8, bottom: 48, left: 8, right: 8 }}
+                      onItemClick={(_, item) => {
+                        const slice = statusSlices[item.dataIndex];
+                        if (!slice) return;
+                        navigate(billsHref({ status: slice.id, ...dateRange }));
+                      }}
+                      sx={{ cursor: "pointer" }}
                     />
                   )}
                 </CardContent>

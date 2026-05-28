@@ -137,6 +137,46 @@ describe("billRepo", () => {
       const { total } = await repo.list({ organizationId: otherOrg, page: 1, pageSize: 100 });
       expect(total).toBe(0);
     });
+
+    it("filters by overdue=true (past-due and not paid)", async () => {
+      const { organizationId: org, ownerId } = await seedOrg(testDb.db);
+      const [vendor] = await testDb.db
+        .insert(vendors)
+        .values({ organizationId: org, name: "OverdueCo", email: "ap@od.com", paymentMethod: "ach" })
+        .returning();
+      const today = new Date().toISOString().slice(0, 10);
+      const past = "2020-01-01";
+      const future = "2999-01-01";
+      await testDb.db.insert(bills).values([
+        { organizationId: org, vendorId: vendor!.id, invoiceNumber: "OD-PAST-APPROVED", amount: "10.00", issueDate: past, dueDate: past, status: "approved", createdBy: ownerId },
+        { organizationId: org, vendorId: vendor!.id, invoiceNumber: "OD-PAST-PAID", amount: "10.00", issueDate: past, dueDate: past, status: "paid", createdBy: ownerId },
+        { organizationId: org, vendorId: vendor!.id, invoiceNumber: "OD-FUTURE-APPROVED", amount: "10.00", issueDate: today, dueDate: future, status: "approved", createdBy: ownerId },
+        { organizationId: org, vendorId: vendor!.id, invoiceNumber: "OD-PAST-DRAFT", amount: "10.00", issueDate: past, dueDate: past, status: "draft", createdBy: ownerId },
+      ]);
+
+      const { items, total } = await repo.list({
+        organizationId: org,
+        page: 1,
+        pageSize: 100,
+        overdue: true,
+      });
+      expect(total).toBe(2);
+      expect(items.map((b) => b.invoiceNumber).sort()).toEqual([
+        "OD-PAST-APPROVED",
+        "OD-PAST-DRAFT",
+      ]);
+
+      // Combined with status: only the approved one.
+      const approvedOverdue = await repo.list({
+        organizationId: org,
+        page: 1,
+        pageSize: 100,
+        overdue: true,
+        status: "approved",
+      });
+      expect(approvedOverdue.total).toBe(1);
+      expect(approvedOverdue.items[0]!.invoiceNumber).toBe("OD-PAST-APPROVED");
+    });
   });
 
   describe("getById", () => {

@@ -65,5 +65,9 @@ export const listBillsQuerySchema = z.object({
   dueBefore: isoDate.optional(),
   dueAfter: isoDate.optional(),
   search: z.string().optional(),
+  overdue: z
+    .union([z.boolean(), z.literal("true"), z.literal("false")])
+    .transform((v) => v === true || v === "true")
+    .optional(),
 });
 export type ListBillsQuery = z.infer<typeof listBillsQuerySchema>;

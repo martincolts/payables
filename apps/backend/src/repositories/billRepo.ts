@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, ilike, inArray, lte, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, lt, lte, ne, or, sql, type SQL } from "drizzle-orm";
 import type {
   ApprovalStatus,
   BillApprover,
@@ -91,7 +91,7 @@ async function loadApproversByBill(
 
 export function createBillRepo(db: DbExecutor): BillRepo {
   return {
-    async list({ organizationId, page, pageSize, status, vendorId, dueBefore, dueAfter, search }) {
+    async list({ organizationId, page, pageSize, status, vendorId, dueBefore, dueAfter, search, overdue }) {
       const offset = (page - 1) * pageSize;
 
       const conditions: SQL[] = [eq(bills.organizationId, organizationId)];
@@ -99,6 +99,10 @@ export function createBillRepo(db: DbExecutor): BillRepo {
       if (vendorId) conditions.push(eq(bills.vendorId, vendorId));
       if (dueBefore) conditions.push(lte(bills.dueDate, dueBefore));
       if (dueAfter) conditions.push(gte(bills.dueDate, dueAfter));
+      if (overdue) {
+        conditions.push(ne(bills.status, "paid"));
+        conditions.push(lt(bills.dueDate, sql`CURRENT_DATE`));
+      }
       if (search) {
         const term = `%${search}%`;
         conditions.push(

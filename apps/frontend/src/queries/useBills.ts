@@ -15,10 +15,11 @@ export interface BillsQuery {
   vendorId?: string;
   dueAfter?: string;
   dueBefore?: string;
+  overdue?: boolean;
 }
 
 export function useBills(query: BillsQuery = {}) {
-  const { page = 1, pageSize = 20, status, search, vendorId, dueAfter, dueBefore } = query;
+  const { page = 1, pageSize = 20, status, search, vendorId, dueAfter, dueBefore, overdue } = query;
 
   return useQuery({
     queryKey: [
@@ -30,6 +31,7 @@ export function useBills(query: BillsQuery = {}) {
       vendorId ?? null,
       dueAfter ?? null,
       dueBefore ?? null,
+      overdue ?? null,
     ],
     placeholderData: keepPreviousData,
     queryFn: async () => {
@@ -42,6 +44,7 @@ export function useBills(query: BillsQuery = {}) {
           ...(vendorId ? { vendorId } : {}),
           ...(dueAfter ? { dueAfter } : {}),
           ...(dueBefore ? { dueBefore } : {}),
+          ...(overdue ? { overdue: "true" } : {}),
         },
       });
       if (!res.ok) throw new Error("Couldn't load bills");

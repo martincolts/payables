@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Box,
   Button,
+  Checkbox,
   CircularProgress,
   FormControl,
+  FormControlLabel,
   IconButton,
   InputLabel,
   MenuItem,
@@ -56,17 +58,48 @@ const STATUS_LABELS: Record<BillStatus, string> = {
   payment_failed: "Payment failed",
 };
 
+type ParamKey =
+  | "page"
+  | "pageSize"
+  | "status"
+  | "search"
+  | "vendorId"
+  | "dueAfter"
+  | "dueBefore"
+  | "overdue";
+
+function isBillStatus(v: string): v is BillStatus {
+  return (billStatuses as readonly string[]).includes(v);
+}
+
 export function Bills() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const isAdmin = user?.role === "admin";
-  const [page, setPage] = useState(0); // TablePagination is 0-based
-  const [pageSize, setPageSize] = useState(10);
-  const [status, setStatus] = useState<BillStatus | "">("");
-  const [search, setSearch] = useState("");
-  const [vendorId, setVendorId] = useState("");
-  const [dueAfter, setDueAfter] = useState("");
-  const [dueBefore, setDueBefore] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const pageParam = Number(searchParams.get("page") ?? "1");
+  const page = Number.isFinite(pageParam) && pageParam > 0 ? pageParam - 1 : 0;
+  const pageSizeParam = Number(searchParams.get("pageSize") ?? "10");
+  const pageSize = [10, 20, 50].includes(pageSizeParam) ? pageSizeParam : 10;
+  const statusParam = searchParams.get("status") ?? "";
+  const status: BillStatus | "" = isBillStatus(statusParam) ? statusParam : "";
+  const search = searchParams.get("search") ?? "";
+  const vendorId = searchParams.get("vendorId") ?? "";
+  const dueAfter = searchParams.get("dueAfter") ?? "";
+  const dueBefore = searchParams.get("dueBefore") ?? "";
+  const overdue = searchParams.get("overdue") === "true";
+
+  function updateParams(patch: Partial<Record<ParamKey, string>>, opts: { resetPage?: boolean } = {}) {
+    const next = new URLSearchParams(searchParams);
+    for (const [k, v] of Object.entries(patch)) {
+      if (v) next.set(k, v);
+      else next.delete(k);
+    }
+    if (opts.resetPage) next.delete("page");
+    setSearchParams(next, { replace: true });
+  }
+
   const { data: vendorsData } = useVendors(1, 100);
   const [formOpen, setFormOpen] = useState(false);
   const [toDelete, setToDelete] = useState<BillListItem | null>(null);
@@ -114,6 +147,7 @@ export function Bills() {
     vendorId: vendorId || undefined,
     dueAfter: dueAfter || undefined,
     dueBefore: dueBefore || undefined,
+    overdue: overdue || undefined,
   });
 
   async function handleDelete() {
@@ -159,23 +193,17 @@ export function Bills() {
         <TextField
           label="Search by vendor or invoice number"
           value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setPage(0);
-          }}
+          onChange={(e) => updateParams({ search: e.target.value }, { resetPage: true })}
           size="small"
           sx={{ flexGrow: 1, minWidth: 220 }}
         />
-        <FormControl size="small" sx={{ minWidth: 200 }}>
+        <FormControl size="small" sx={{ minWidth: 200 }} disabled={overdue}>
           <InputLabel id="status-filter-label">Status</InputLabel>
           <Select
             labelId="status-filter-label"
             label="Status"
             value={status}
-            onChange={(e) => {
-              setStatus(e.target.value as BillStatus | "");
-              setPage(0);
-            }}
+            onChange={(e) => updateParams({ status: e.target.value }, { resetPage: true })}
           >
             <MenuItem value="">All</MenuItem>
             {billStatuses.map((s) => (
@@ -191,10 +219,7 @@ export function Bills() {
             labelId="vendor-filter-label"
             label="Vendor"
             value={vendorId}
-            onChange={(e) => {
-              setVendorId(e.target.value);
-              setPage(0);
-            }}
+            onChange={(e) => updateParams({ vendorId: e.target.value }, { resetPage: true })}
           >
             <MenuItem value="">All</MenuItem>
             {vendorsData?.items.map((v) => (
@@ -209,10 +234,7 @@ export function Bills() {
           type="date"
           size="small"
           value={dueAfter}
-          onChange={(e) => {
-            setDueAfter(e.target.value);
-            setPage(0);
-          }}
+          onChange={(e) => updateParams({ dueAfter: e.target.value }, { resetPage: true })}
           slotProps={{ inputLabel: { shrink: true } }}
           sx={{ minWidth: 160 }}
         />
@@ -221,12 +243,23 @@ export function Bills() {
           type="date"
           size="small"
           value={dueBefore}
-          onChange={(e) => {
-            setDueBefore(e.target.value);
-            setPage(0);
-          }}
+          onChange={(e) => updateParams({ dueBefore: e.target.value }, { resetPage: true })}
           slotProps={{ inputLabel: { shrink: true } }}
           sx={{ minWidth: 160 }}
+        />
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={overdue}
+              onChange={(e) =>
+                updateParams(
+                  { overdue: e.target.checked ? "true" : "", status: e.target.checked ? "" : status },
+                  { resetPage: true },
+                )
+              }
+            />
+          }
+          label="Overdue only"
         />
       </Stack>
 
@@ -373,12 +406,14 @@ export function Bills() {
             component="div"
             count={data.total}
             page={page}
-            onPageChange={(_, p) => setPage(p)}
+            onPageChange={(_, p) => updateParams({ page: p > 0 ? String(p + 1) : "" })}
             rowsPerPage={pageSize}
-            onRowsPerPageChange={(e) => {
-              setPageSize(Number(e.target.value));
-              setPage(0);
-            }}
+            onRowsPerPageChange={(e) =>
+              updateParams(
+                { pageSize: e.target.value === "10" ? "" : e.target.value },
+                { resetPage: true },
+              )
+            }
             rowsPerPageOptions={[10, 20, 50]}
             labelRowsPerPage="Rows per page"
             labelDisplayedRows={({ from, to, count }) => `${from}–${to} of ${count}`}
