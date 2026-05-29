@@ -1,180 +1,168 @@
 # Payables — Accounts Payable MVP
 
-A modern accounts payable product inspired by Ramp Bill Pay. Built end-to-end with a focus on the core bill lifecycle, approval workflows, and payment tracking.
+A small accounts-payable web app inspired by Ramp Bill Pay. A finance team can
+onboard vendors, capture bills, route them through an approval workflow, and
+track what's owed and what's overdue.
 
 ---
 
 ## What the product does
 
-Payables is an internal finance tool that helps companies manage their vendor invoices from receipt to payment. The core loop is:
+Payables is a multi-tenant tool for managing vendor invoices end-to-end:
 
 **Receive invoice → Create bill → Route for approval → Schedule payment → Mark as paid**
 
-It gives finance teams visibility into what they owe, to whom, and when — with a lightweight approval layer to enforce controls before money goes out the door.
+Every user, vendor, and bill belongs to an **organization**. Signing up
+creates a new org with the signer as its first admin; admins invite
+teammates as either `admin` or `approver`. Each org configures how many
+distinct approvals a bill needs before it can be paid.
+
+The app gives finance teams a single place to answer: *what do we owe,
+to whom, when is it due, and who signed off on it?*
 
 ---
 
 ## Workflows prioritized
 
-### 1. Bill lifecycle management (core)
-Bills move through a clear state machine:
-
-```
-draft → pending_approval → approved → scheduled → paid
-                        ↘ rejected → draft (with comment)
-```
-
-- Create bills manually with vendor, amount, due date, line items, and memo
-- Visual status badges with overdue highlighting when `due_date < today && status != paid`
-- Filter and search by status, vendor, and date range
-
-### 2. Vendor management
-- CRUD for vendors (name, email, payment method, bank account info)
-- Vendor-level payment method defaults (ACH, wire, check)
-
-### 3. Approval workflow
-- Admins submit a draft bill for approval (`draft → pending_approval`)
-- Approvers approve or reject, with a required comment on rejection
-- **Configurable quorum:** each organization sets how many *distinct* approvers
-  must approve a bill before it moves to `approved` (Settings → "Approvals
-  required per bill"). Any single rejection moves it to `rejected`.
-- Activity log per bill showing every state transition
-
-### 3a. Organizations, team & invitations
-- **Multi-tenant:** every user, vendor, and bill belongs to an organization.
-  Signup creates a new organization with the signer as its first **admin**.
-- Admins invite teammates as **admin** or **approver** from the Team page.
-- Accepting an invitation activates the account (the invitee sets a password)
-  and logs them straight in.
-- **Note on invitations:** to keep the MVP self-contained, accepting an invite
-  is an in-app flow — creating an invitation surfaces a link the admin shares
-  manually. In a real application this link would be **emailed** to the invitee
-  (e.g. via SendGrid/SES) rather than shown in the UI. The acceptance endpoint
-  and token model are already exactly what an emailed link would use.
-
-### 4. Payments
-- Schedule a payment with a target date and method
-- Mark bills as paid with a reference number (simulated — no real banking integration)
-- Payment history per vendor
-
-### 5. Dashboard
-- Total AP outstanding
-- Bills overdue / due this week / pending approval
-- Quick-action shortcuts for the most common tasks
-
-### 6. AP Aging report
-- Vendor × aging-bucket pivot table (**Current / 1–30 / 31–60 / 61–90 / 90+**)
-  computed against a user-selectable **As of** date
-- Only unpaid bills are included; vendors with no exposure are hidden
-- Click any cell to drill into `/bills` pre-filtered by vendor + the bucket's
-  due-date window
-- **CSV export** of the report (`GET /api/stats/ap-aging.csv?asOf=...`) for
-  hand-off to spreadsheet workflows
+- **Vendor management** — CRUD for vendors with default payment method
+  (ACH / wire / check) and bank-account last-4.
+- **Bill lifecycle** — create bills with line items, submit for approval,
+  approve/reject with comments, schedule and mark paid. Status transitions
+  are validated by a server-side state machine; the activity log captures
+  every transition with actor + timestamp.
+- **Approvers & quorum** — each org sets *N* distinct approvals required.
+  Any single rejection sends the bill back. Invitations let admins onboard
+  approvers into the org.
+- **Reports** — dashboard tiles (outstanding AP, overdue, due this week,
+  pending approval) plus a full **AP Aging report** (vendor × Current / 1–30
+  / 31–60 / 61–90 / 90+ buckets, against a user-chosen *As-of* date, with
+  drill-down and CSV export).
 
 ---
 
 ## What was left out and why
 
-| Feature | Reason excluded |
+Since this is a take-home / portfolio test, **none of the items below are
+implemented or stubbed in a way that could be considered production-ready**.
+They are listed so you can see what a "real" version would need.
+
+| Feature | Why excluded |
 |---|---|
-| OCR / PDF invoice upload | High complexity, low MVP value — manually entering bills covers the workflow |
-| Real payment execution | Requires banking integrations (Stripe Treasury, Modern Treasury, etc.). Payments are simulated: the user enters a reference number and marks the bill as paid manually |
-| Multi-currency | Adds complexity to every amount calculation; USD-only is a valid MVP constraint |
-| Recurring bills | Useful but a layer on top of the core flow |
-| ERP sync (QuickBooks, NetSuite) | Integration work, not product work |
-| Multi-entity / subsidiaries | Enterprise feature, premature for MVP |
+| **PDF / OCR invoice ingestion** | Real OCR is its own product surface (Textract/Google DocAI + a review queue for low-confidence fields). High effort, orthogonal to the bill-lifecycle workflow this MVP demonstrates. |
+| **In-app notifications** | Would need a notifications table, a delivery worker, read/unread state and a UI tray. Skipped to keep scope tight. |
+| **Email notifications for invitations** | Invitations work via an in-app link the admin copies and shares. In production this link would be emailed (SendGrid/SES) — the token model + acceptance endpoint already match what an emailed link would carry. |
+| **Public API + webhooks for customers** | A real product needs API keys, scoped tokens, signed webhook deliveries with retries/DLQ, and versioning. Out of scope for an MVP. |
+| **Cron / scheduled jobs** | No background scheduler runs to flag overdue bills, send approval reminders, or auto-transition `scheduled → paid` on the scheduled date. Today "overdue" is computed at query time from `due_date < today`. |
+| **Automations** | E.g. auto-approve bills under $X from a trusted vendor, auto-route by GL account or amount band, duplicate-invoice detection. Easy to layer on top of the state machine — none built. |
+| **Real payments (banking integration)** | Payments are **simulated** — see below. |
+
+### About "simulated" payments
+
+When a user marks a bill paid they enter a reference number (a wire confirmation
+or ACH trace ID) and the bill transitions to `paid`. No money actually moves.
+
+A real implementation would slot in at the **service layer** with no changes to
+routes or the schema, roughly:
+
+1. Integrate a payment rail — **Modern Treasury** or **Stripe Treasury** are the
+   usual choices; both expose ACH, wire, and check-issuance via API.
+2. Replace the "mark paid" action with **"submit for payment"**: the service
+   calls the provider's *create payment order* endpoint and records the returned
+   `external_payment_id` on the `payments` row, transitioning the bill to a new
+   `processing` state.
+3. Consume the provider's **webhooks** (`payment_order.sent`,
+   `payment_order.completed`, `payment_order.failed`) to drive the bill from
+   `processing → paid` or `processing → failed`. Webhook handlers must be
+   idempotent (key on `external_payment_id` + event id) and signature-verified.
+4. Add the operational surface real money requires: a **ledger** of debits/credits,
+   reconciliation against bank statements, retry policies for failed payments,
+   approver-level dollar limits, and dual-control on the actual release.
+5. Treat the bank-account fields on `vendors` as PII — encrypt at rest and gate
+   access behind audit logging.
+
+The current code is structured so all of the above lives behind `paymentService`
+and the rest of the stack (routes, frontend, state machine) does not change.
 
 ---
 
-## Current status
-
-The Nx + pnpm monorepo is wired end-to-end through every layer (repository →
-service → Hono route → typed RPC client → React page with pagination). Auth,
-vendors, bills, **multi-tenant organizations**, **invitations**, and the
-**configurable approval quorum** are implemented and covered by repository +
-end-to-end integration tests (real Postgres, real Hono app). The bill state
-machine is enforced server-side (`apps/backend/src/services/billStateMachine.ts`).
-`nx run-many -t typecheck` and the backend test suite pass.
-
-**Multi-tenancy note:** `users.email` is globally unique so login-by-email is
-unambiguous (a person belongs to one org). A multi-org-membership model would
-scope email per-org and resolve the org at login — deliberately out of scope.
-
 ## Setup instructions
 
-### Prerequisites
-- Node.js 24 (an `.nvmrc` pins it — run `nvm use`)
+There are two paths: **local dev** (run Postgres in Docker, run the
+backend/frontend on your machine for fast iteration) and **full Docker**
+(everything containerized, plus an optional Cloudflare Quick Tunnel that
+gives you a public HTTPS URL with no domain / no account).
+
+### Prereqs
+
+- Node.js 24 (an `.nvmrc` pins it — `nvm use`)
 - pnpm 11 (`corepack enable pnpm`)
-- PostgreSQL 14+ (only needed to actually serve the API / run migrations)
+- Docker + the compose plugin
 
-Nx and all build tooling are installed as workspace dependencies — no global installs needed.
-
-### Clone & install
+### Local development
 
 ```bash
-git clone
-cd payables
-nvm use          # selects Node 24 from .nvmrc
+nvm use
 corepack enable pnpm
-pnpm install     # installs every workspace package from the root
-```
+pnpm install
 
-> On first install pnpm asks to approve native build scripts (esbuild, nx). They are pre-approved in `pnpm-workspace.yaml` under `allowBuilds`.
-
-### Configure
-
-```bash
 cp apps/backend/.env.example apps/backend/.env
-# Set DATABASE_URL and JWT_SECRET
 cp apps/frontend/.env.example apps/frontend/.env
-# Leave VITE_API_URL empty in dev — Vite proxies /api → http://localhost:8080
-```
+# Set JWT_SECRET in apps/backend/.env. DATABASE_URL defaults to the docker postgres.
 
-The backend validates its environment at startup with Zod (`apps/backend/src/config.ts`); it fails fast with a readable error if a required variable is missing.
+# Start ONLY the database — backend + frontend run on the host:
+docker compose up -d postgres
 
-### Database & migrations
-
-```bash
-createdb payables
-pnpm nx run backend:generate   # drizzle-kit generate — diffs the schema into SQL under apps/backend/drizzle
-pnpm nx run backend:migrate    # drizzle-kit migrate — applies those migrations
-```
-
-The schema is the source of truth in `apps/backend/src/db/schema`. After editing a table, re-run `generate` then `migrate`.
-
-### Seed demo data
-
-```bash
+# Apply migrations and seed demo data:
+pnpm nx run backend:migrate
 pnpm nx run backend:seed
+
+# Run both apps:
+pnpm nx run-many -t serve
+# Backend: http://localhost:8080   Frontend: http://localhost:5173
 ```
 
-Seeds a demo organization ("Payables Demo Co", configured to require **2
-approvals** per bill), demo vendors (AWS, Stripe, Figma, WeWork, Notion), and a
-spread of bills across statuses. Two demo accounts (password `password123`):
+The seed creates a **"Payables Demo Co"** organization (configured to
+require 2 approvals per bill), demo vendors, and a spread of bills across
+statuses. Demo logins (all use password `password123`):
 
 | Email | Role |
 |---|---|
-| `admin@payables.com` | admin — create/submit bills, manage the team & settings |
-| `approver@payables.com` | approver — approve/reject bills pending approval |
+| `admin@payables.com` | admin — creates bills, manages team & settings |
+| `approver@payables.com` | approver |
+| `approver2@payables.com` | approver |
+| `approver3@payables.com` | approver |
 
-The seed is idempotent: re-running reuses the existing demo org.
+### Publishing with full Docker + Cloudflare Quick Tunnel
 
-### Run
-
-```bash
-pnpm nx serve backend    # tsx watch — API at http://localhost:8080 (GET /health)
-pnpm nx serve frontend   # Vite dev server — app at http://localhost:5173
-```
-
-Or start everything in parallel: `pnpm nx run-many -t serve`.
-
-### Verify the workspace
+To run the whole stack (Postgres + backend + nginx-served frontend + a
+public HTTPS URL) on any Linux host with no domain and no Cloudflare
+account:
 
 ```bash
-pnpm nx run-many -t typecheck   # type-checks shared, backend, frontend (cached)
-pnpm nx build frontend          # production Vite build
-pnpm nx show projects           # → frontend, backend, shared
+cp .env.example .env
+# Set JWT_SECRET and POSTGRES_PASSWORD at minimum.
+
+docker compose up -d --build
 ```
+
+Run migrations + seed **inside** the backend container:
+
+```bash
+docker compose exec backend pnpm exec drizzle-kit migrate
+docker compose exec backend pnpm exec tsx src/db/seed.ts
+```
+
+Get the public URL — `cloudflared` prints it to its logs every time it starts:
+
+```bash
+docker compose logs cloudflared | grep -Eo 'https://[a-z0-9-]+\.trycloudflare\.com'
+# → e.g. https://shiny-otter-vacation-1234.trycloudflare.com
+```
+
+That URL is HTTPS and serves both the SPA and the `/api` backend behind the
+same origin (so no CORS). It **changes every time `cloudflared` restarts** —
+Quick Tunnels are intentionally ephemeral. See [CLOUDFLARE.md](CLOUDFLARE.md)
+for the stable-URL options (named tunnel with a domain, or Tailscale Funnel).
 
 ---
 
@@ -184,184 +172,159 @@ pnpm nx show projects           # → frontend, backend, shared
 
 | Layer | Choice | Why |
 |---|---|---|
-| Monorepo | Nx + pnpm workspaces | One repo, one lockfile; task graph + caching + `nx affected`; clean app/lib boundaries |
-| Backend | Node + Hono (TypeScript) | Tiny, fast, type-first router; same language as the frontend, shared types across the repo |
-| Data layer | Drizzle ORM + node-postgres | Type-safe, SQL-shaped queries — predictable generated SQL, no ORM "magic" hiding what runs |
-| Migrations | drizzle-kit (schema-derived SQL) | Versioned, auditable migrations generated from the schema as the source of truth |
-| Validation | Zod | One schema validates request DTOs and infers their TypeScript types at the edge |
-| Frontend | React + TypeScript + MUI | Fast iteration, strong typing on API contracts, mobile-first PWA |
-| Auth | JWT (HS256, via `jose`) | Stateless bearer tokens; a shared secret keeps the MVP simple. Swap to RS256/JWKS if it grows to multiple services |
-| Database | PostgreSQL | Relational integrity and ACID transactions for payment state changes |
+| Monorepo | Nx + pnpm workspaces | One repo, one lockfile, task graph + caching, clean app/lib boundaries |
+| Backend | Node + Hono (TS) | Tiny, fast, type-first router; same language as the frontend |
+| Data layer | Drizzle ORM + node-postgres | Type-safe, SQL-shaped queries — no ORM "magic" |
+| Migrations | drizzle-kit | Versioned SQL migrations generated from the schema |
+| Validation | Zod | Same schema validates request DTOs and infers their TS types |
+| Frontend | React + TS + MUI + TanStack Query | Strong typing on the API contract, mobile-first PWA |
+| Auth | JWT (HS256 via `jose`) | Stateless bearer tokens; simple shared secret for the MVP |
+| Database | PostgreSQL 18 | Relational integrity + ACID for state transitions |
 
-### Project structure
+### Layered backend
 
-Nx workspace: deployable apps under `apps/`, shared code under `libs/`.
+Each domain entity follows the same shape:
 
 ```
-/apps
-  /backend                  ← Node + Hono API
-    /src
-      index.ts              ← entrypoint: load config, wire deps, start server
-      config.ts             ← env parsing/validation (Zod)
-      /db
-        client.ts           ← pg Pool + Drizzle client
-        /schema             ← Drizzle tables (source of truth for migrations)
-          index.ts
-          users.ts
-          vendors.ts
-          bills.ts
-          payments.ts
-          approvals.ts
-          activityLog.ts
-        seed.ts             ← demo data seeder
-      /types                ← domain types, Zod DTOs, sentinel errors
-      /repositories         ← all DB access (Drizzle); maps PG errors → domain errors
-          vendorRepo.ts
-          billRepo.ts
-          paymentRepo.ts
-          approvalRepo.ts
-          activityLogRepo.ts
-      /services             ← business logic, state machine, validations
-          billService.ts
-      /routes               ← Hono handlers, request/response DTOs
-          billRoutes.ts
-          vendorRoutes.ts
-          paymentRoutes.ts
-      /middleware
-          auth.ts
-    drizzle.config.ts       ← drizzle-kit config (schema glob + DATABASE_URL)
-    /drizzle                ← generated, versioned SQL migrations
-  /frontend                 ← React + TypeScript PWA
-    /src
-      /api                  ← typed API client (fetch wrappers)
-      /components
-        /bills
-        /vendors
-        /dashboard
-      /pages
-        Dashboard.tsx
-        Bills.tsx
-        BillDetail.tsx
-        Vendors.tsx
-      /queries              ← TanStack Query hooks
-      /types                ← frontend-only view types
-/libs
-  /shared                   ← @payables/shared: Zod schemas + domain enums shared by frontend + backend
-nx.json                     ← Nx task/target config
-pnpm-workspace.yaml         ← workspace package globs (apps/*, libs/*) + allowBuilds
-tsconfig.base.json          ← shared compiler options + @payables/shared path alias
-.nvmrc                      ← pins Node 24
-README.md
+routes/    Hono handlers — parse DTOs (Zod), call service, shape response
+services/  Business logic + state machine + cross-entity rules
+repositories/  All DB access (Drizzle); maps PG errors → domain errors
+db/schema/     Drizzle tables — the source of truth for migrations
 ```
 
-### Sharing the contract: shared lib + Hono RPC
+Services depend on **consumer-side types** for their repos (not concrete
+classes), so unit tests use hand-written fakes and integration tests use the
+real Drizzle implementation against a real Postgres.
 
-Two complementary mechanisms keep the frontend and backend in sync, with no hand-duplicated types:
+### Sharing the contract
 
-- **`libs/shared` owns the models** — the domain enums and Zod schemas/DTOs (`bill.ts`, `vendor.ts`, `pagination.ts`). The backend imports them to validate requests *and* to build the Drizzle `pgEnum`s; the frontend imports the same types for forms. One source of truth for shapes.
-- **[Hono RPC](https://hono.dev/docs/guides/rpc) owns the wire contract** — the backend exports `AppType` (`apps/backend/src/app.ts`) and the frontend's `apps/frontend/src/api/client.ts` builds a typed client with `hc<AppType>(...)`. Endpoint paths, query params, and response shapes are *inferred from the routes*, so the frontend won't compile against an endpoint that doesn't exist.
+- **`libs/shared`** owns the domain enums and Zod schemas. The backend uses
+  them to validate requests *and* to build Drizzle `pgEnum`s; the frontend
+  uses them in forms. One source of truth for shapes.
+- **Hono RPC** owns the wire contract — the backend exports `AppType`, the
+  frontend builds a typed client with `hc<AppType>(...)`. Endpoint paths,
+  query params, and response shapes are inferred from the routes, so the
+  frontend won't compile against an endpoint that doesn't exist.
+
+### State machine, server-side
+
+```
+draft → pending_approval → approved → scheduled → paid
+                        ↘ rejected → draft
+```
+
+Every transition is validated in `billService` before any write, and writes
+an immutable row to `activity_log` (actor, action, metadata, timestamp).
+Illegal transitions return 422.
+
+### Multi-tenancy
+
+Every row that belongs to a tenant carries `organization_id`. Repositories
+take `organizationId` and scope every query — no implicit tenancy from the
+auth middleware. `users.email` is globally unique (one person ↔ one org for
+the MVP); a multi-org membership model would scope email per-org instead.
 
 ### Data model
 
-The schema is defined in TypeScript with Drizzle (`apps/backend/src/db/schema`); `drizzle-kit generate` diffs it into the versioned SQL migrations under `apps/backend/drizzle`. The effective Postgres schema is:
+```mermaid
+erDiagram
+    organizations ||--o{ users : has
+    organizations ||--o{ vendors : has
+    organizations ||--o{ bills : has
+    organizations ||--o{ invitations : has
 
-```sql
-CREATE TYPE bill_status AS ENUM (
-  'draft', 'pending_approval', 'approved', 'rejected', 'scheduled', 'paid'
-);
+    users ||--o{ bills : "created_by"
+    users ||--o{ approvals : "approver"
+    users ||--o{ activity_log : "actor"
+    users ||--o{ invitations : "invited_by"
 
-CREATE TYPE payment_method AS ENUM ('ach', 'wire', 'check');
+    vendors ||--o{ bills : "billed_by"
 
-CREATE TABLE vendors (
-  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name           TEXT NOT NULL,
-  email          TEXT NOT NULL,
-  payment_method payment_method NOT NULL,
-  bank_last4     TEXT,
-  created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+    bills ||--o{ bill_line_items : "has"
+    bills ||--o{ approvals : "needs"
+    bills ||--|| payments : "settled_by"
+    bills ||--o{ activity_log : "audited_by"
 
-CREATE TABLE bills (
-  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  vendor_id      UUID NOT NULL REFERENCES vendors(id),
-  invoice_number TEXT,
-  amount         NUMERIC(12, 2) NOT NULL,
-  currency       TEXT NOT NULL DEFAULT 'USD',
-  issue_date     DATE NOT NULL,
-  due_date       DATE NOT NULL,
-  status         bill_status NOT NULL DEFAULT 'draft',
-  memo           TEXT,
-  created_by     UUID NOT NULL REFERENCES users(id),
-  created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE TABLE bill_line_items (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  bill_id     UUID NOT NULL REFERENCES bills(id) ON DELETE CASCADE,
-  description TEXT NOT NULL,
-  amount      NUMERIC(12, 2) NOT NULL,
-  category    TEXT,
-  gl_account  TEXT
-);
-
-CREATE TABLE approvals (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  bill_id     UUID NOT NULL REFERENCES bills(id),
-  approver_id UUID NOT NULL REFERENCES users(id),
-  status      TEXT NOT NULL DEFAULT 'pending', -- pending | approved | rejected
-  comment     TEXT,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  resolved_at TIMESTAMPTZ
-);
-
-CREATE TABLE payments (
-  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  bill_id          UUID NOT NULL UNIQUE REFERENCES bills(id),
-  amount           NUMERIC(12, 2) NOT NULL,
-  method           payment_method NOT NULL,
-  reference_number TEXT,
-  scheduled_date   DATE,
-  paid_at          TIMESTAMPTZ,
-  status           TEXT NOT NULL DEFAULT 'scheduled' -- scheduled | paid | failed
-);
-
-CREATE TABLE activity_log (
-  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  bill_id    UUID NOT NULL REFERENCES bills(id),
-  user_id    UUID NOT NULL REFERENCES users(id),
-  action     TEXT NOT NULL,
-  metadata   JSONB,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+    organizations {
+        uuid id PK
+        text name
+        int approvals_required
+        timestamptz created_at
+    }
+    users {
+        uuid id PK
+        uuid organization_id FK
+        text email UK
+        text password_hash
+        text role "admin | approver"
+        timestamptz created_at
+    }
+    invitations {
+        uuid id PK
+        uuid organization_id FK
+        uuid invited_by FK
+        text email
+        text role
+        text token UK
+        timestamptz accepted_at
+        timestamptz expires_at
+    }
+    vendors {
+        uuid id PK
+        uuid organization_id FK
+        text name
+        text email
+        text payment_method "ach | wire | check"
+        text bank_last4
+        timestamptz created_at
+    }
+    bills {
+        uuid id PK
+        uuid organization_id FK
+        uuid vendor_id FK
+        uuid created_by FK
+        text invoice_number
+        numeric amount
+        text currency
+        date issue_date
+        date due_date
+        text status "draft|pending_approval|approved|rejected|scheduled|paid"
+        text memo
+        timestamptz created_at
+    }
+    bill_line_items {
+        uuid id PK
+        uuid bill_id FK
+        text description
+        numeric amount
+        text category
+        text gl_account
+    }
+    approvals {
+        uuid id PK
+        uuid bill_id FK
+        uuid approver_id FK
+        text status "pending|approved|rejected"
+        text comment
+        timestamptz created_at
+        timestamptz resolved_at
+    }
+    payments {
+        uuid id PK
+        uuid bill_id FK
+        numeric amount
+        text method "ach | wire | check"
+        text reference_number
+        date scheduled_date
+        timestamptz paid_at
+        text status "scheduled|paid|failed"
+    }
+    activity_log {
+        uuid id PK
+        uuid bill_id FK
+        uuid user_id FK
+        text action
+        jsonb metadata
+        timestamptz created_at
+    }
 ```
-
-### Repository pattern
-
-Each domain entity has a repository that owns its Drizzle queries. Services declare the slice of the repo they need as a TypeScript type (consumer-side interface), so business logic stays independent of the database and is easy to test with a hand-written fake.
-
-```ts
-// the shape the service depends on
-type BillRepo = {
-  create(input: NewBill): Promise<Bill>;
-  getById(id: string): Promise<Bill>;
-  list(params: ListBillsInput): Promise<{ items: Bill[]; total: number }>;
-  updateStatus(id: string, status: BillStatus): Promise<void>;
-};
-
-// concrete implementation (apps/backend/src/repositories/billRepo.ts)
-export function createBillRepo(db: DB): BillRepo {
-  /* Drizzle queries; maps Postgres errors → domain errors at this boundary */
-}
-```
-
-### State machine is enforced server-side
-
-Bill status transitions are validated in `billService.ts` before any DB write. The API returns a 422 on illegal transitions (e.g. `paid → draft`). The frontend reflects valid actions only, but the backend is the source of truth.
-
-### Activity log is append-only
-
-Every state transition writes an immutable row to `activity_log`. This gives a full audit trail per bill — important in financial workflows where you need to know who approved what and when.
-
-### Payments are simulated
-
-There is no real banking integration. When a user marks a bill as paid, they provide a reference number (e.g. a wire confirmation or ACH trace ID) and the system records the payment and transitions the bill to `paid`. Integrating a real payment rail (Modern Treasury, Stripe Treasury) would slot in at the service layer without touching the rest of the stack.
