@@ -176,6 +176,103 @@ for the stable-URL options (named tunnel with a domain, or Tailscale Funnel).
 
 ---
 
+## API usage & user flows
+
+A short, end-to-end walkthrough of the two flows that exercise the bulk of
+the API. All endpoints are mounted under `/api`; authenticated calls expect
+`Authorization: Bearer <jwt>` returned by `/api/auth/login` or `/api/auth/signup`.
+Replace `$URL` with either `http://localhost:8080` (local dev) or the public
+Cloudflare URL above.
+
+### Flow 1 — Sign up, create a vendor, create a bill
+
+```bash
+# 1. Sign up — creates an organization and returns a JWT for its first admin
+TOKEN=$(curl -s -X POST $URL/api/auth/signup \
+  -H 'content-type: application/json' \
+  -d '{
+    "email": "founder@acme.test",
+    "password": "password123",
+    "organizationName": "Acme Inc"
+  }' | jq -r .token)
+
+# 2. Create a vendor (admin only)
+VENDOR_ID=$(curl -s -X POST $URL/api/vendors \
+  -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{
+    "name": "AWS",
+    "email": "ar@aws.example",
+    "paymentMethod": "ach",
+    "bankLast4": "4242"
+  }' | jq -r .id)
+
+# 3. Create a draft bill against that vendor
+BILL_ID=$(curl -s -X POST $URL/api/bills \
+  -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d "{
+    \"vendorId\": \"$VENDOR_ID\",
+    \"invoiceNumber\": \"INV-001\",
+    \"amount\": \"1250.00\",
+    \"currency\": \"USD\",
+    \"issueDate\": \"2026-05-01\",
+    \"dueDate\": \"2026-05-31\",
+    \"lineItems\": [
+      { \"description\": \"EC2 — May\", \"amount\": \"1250.00\", \"category\": \"infra\" }
+    ]
+  }" | jq -r .id)
+
+# 4. Submit it for approval — moves status draft → pending_approval
+curl -s -X POST $URL/api/bills/$BILL_ID/submit \
+  -H "authorization: Bearer $TOKEN"
+```
+
+### Flow 2 — Approve and pay a bill
+
+```bash
+# Log in as an approver (org must have approver users; seed data provides three)
+APPROVER_TOKEN=$(curl -s -X POST $URL/api/auth/login \
+  -H 'content-type: application/json' \
+  -d '{ "email": "approver@payables.com", "password": "password123" }' | jq -r .token)
+
+# Approve the bill — repeat with distinct approver accounts until the org's
+# `approvals_required` quorum is met; the bill then auto-transitions to `approved`.
+curl -s -X POST $URL/api/bills/$BILL_ID/approvals \
+  -H "authorization: Bearer $APPROVER_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{ "decision": "approved", "comment": "LGTM" }'
+
+# Once approved, an admin records a simulated payment (reference number stands
+# in for a wire confirmation / ACH trace). Bill transitions approved → paid.
+curl -s -X POST $URL/api/bills/$BILL_ID/simulate-payment \
+  -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{
+    "method": "ach",
+    "referenceNumber": "ACH-20260515-0001",
+    "scheduledDate": "2026-05-20"
+  }'
+```
+
+### Endpoint map
+
+| Area | Routes |
+|---|---|
+| Auth | `POST /api/auth/signup`, `POST /api/auth/login`, `GET /api/auth/me` |
+| Vendors | `GET/POST /api/vendors`, `GET /api/vendors/:id`, `DELETE /api/vendors/:id` |
+| Bills | `GET/POST /api/bills`, `GET /api/bills/:id`, `POST /api/bills/:id/submit`, `GET/POST /api/bills/:id/approvals`, `POST /api/bills/:id/simulate-payment[-failure]` |
+| Org & members | `GET/PATCH /api/organizations`, `GET /api/organizations/members` |
+| Invitations | `POST /api/invitations`, `GET /api/invitations/:token`, `POST /api/invitations/accept` |
+| Reports | `GET /api/stats/*`, `GET /api/activity-log` |
+
+List endpoints take `?page=<n>&pageSize=<m>` (1-based). Request bodies are
+validated by Zod schemas in `libs/shared` — see those for exact field types.
+The frontend doesn't hand-write any of this; it consumes the typed Hono RPC
+client built from `AppType`, which is the same contract these `curl` calls hit.
+
+---
+
 ## Notes on review feedback
 
 A code review flagged two items as "critical." After investigating, neither
