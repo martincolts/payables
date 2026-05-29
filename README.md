@@ -164,6 +164,56 @@ same origin (so no CORS). It **changes every time `cloudflared` restarts** —
 Quick Tunnels are intentionally ephemeral. See [CLOUDFLARE.md](CLOUDFLARE.md)
 for the stable-URL options (named tunnel with a domain, or Tailscale Funnel).
 
+#### Current public URL
+
+> https://breach-calculator-publishers-columns.trycloudflare.com/
+
+> **Note:** this deployment uses the **free** Cloudflare Quick Tunnel, which
+> issues a new random URL every time the container is restarted or redeployed.
+> The link above can therefore stop working without notice. We'll do our best
+> to keep this README updated with the latest URL — if you find it broken,
+> please reach out and we'll share the current one.
+
+---
+
+## Notes on review feedback
+
+A code review flagged two items as "critical." After investigating, neither
+reflects an actual bug; the notes below explain why so future reviewers don't
+re-open the same threads.
+
+### "Potential SQL injection in `vendorRepo.create`"
+
+The flagged line uses Drizzle's query builder:
+
+```ts
+await db.insert(vendors).values({ organizationId, name, email, paymentMethod, bankLast4 })
+```
+
+Drizzle compiles `.insert(...).values(...)` to a parameterized `INSERT` and
+binds every column value through node-postgres as a bound parameter — no
+string interpolation, no `sql.raw`, no template-tagged user input. This is
+the canonical safe-from-injection pattern for the library. There is nothing
+to "parameterize" here that isn't already parameterized.
+
+### "`hashPassword` does not handle errors from `scrypt` → unhandled promise rejection"
+
+```ts
+const derived = (await scryptAsync(plain, salt, KEYLEN)) as Buffer;
+```
+
+`hashPassword` is `async` and awaits `scryptAsync`. If scrypt rejects, the
+`await` rethrows into the returned promise, and the caller (`authService`,
+itself awaited by the route handler) propagates the rejection up to Hono's
+central error middleware. There is no detached promise and therefore no
+unhandled rejection. Wrapping the `await` in `try/catch` purely to rethrow
+would be a no-op; catching to log-and-swallow would actively hide a real
+crypto failure. The current shape is correct.
+
+An unhandled rejection would only arise if a caller invoked `hashPassword(...)`
+without `await` or `.catch(...)`, which would be a bug at the call site, not
+in this function.
+
 ---
 
 ## Key architecture decisions
