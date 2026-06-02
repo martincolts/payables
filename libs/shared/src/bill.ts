@@ -62,6 +62,35 @@ export const createBillSchema = z.object({
 });
 export type CreateBillInput = z.infer<typeof createBillSchema>;
 
+/**
+ * Mocked invoice-ingestion result. Returned by `POST /api/bills/extract` and
+ * used to pre-fill the create-bill form. Mirrors `CreateBillInput`, but every
+ * field carries a `confidence` (0–1) so the UI can flag low-confidence values
+ * for review — `vendorName` is a string the form resolves to a `vendorId`.
+ */
+const confidence = z.number().min(0).max(1);
+
+const extractedField = <T extends z.ZodTypeAny>(value: T) =>
+  z.object({ value, confidence });
+
+export const extractedLineItemSchema = z.object({
+  description: z.string(),
+  amount: z.string(),
+  confidence,
+});
+export type ExtractedLineItem = z.infer<typeof extractedLineItemSchema>;
+
+export const extractedInvoiceSchema = z.object({
+  vendorName: extractedField(z.string()),
+  invoiceNumber: extractedField(z.string()),
+  issueDate: extractedField(isoDate),
+  dueDate: extractedField(isoDate),
+  amount: extractedField(z.string()),
+  lineItems: z.array(extractedLineItemSchema),
+  mocked: z.literal(true), // honest marker the UI and README surface
+});
+export type ExtractedInvoice = z.infer<typeof extractedInvoiceSchema>;
+
 /** Filters accepted by the bill list endpoint (merged with pagination). */
 export const listBillsQuerySchema = z.object({
   status: billStatusSchema.optional(),

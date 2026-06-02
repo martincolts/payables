@@ -48,7 +48,6 @@ They are listed so you can see what a "real" version would need.
 
 | Feature | Why excluded |
 |---|---|
-| **PDF / OCR invoice ingestion** | Real OCR is its own product surface (Textract/Google DocAI + a review queue for low-confidence fields). High effort, orthogonal to the bill-lifecycle workflow this MVP demonstrates. |
 | **In-app notifications** | Would need a notifications table, a delivery worker, read/unread state and a UI tray. Skipped to keep scope tight. |
 | **Email notifications for invitations** | Invitations work via an in-app link the admin copies and shares. In production this link would be emailed (SendGrid/SES) — the token model + acceptance endpoint already match what an emailed link would carry. |
 | **Public API + webhooks for customers** | A real product needs API keys, scoped tokens, signed webhook deliveries with retries/DLQ, and versioning. Out of scope for an MVP. |
@@ -82,6 +81,23 @@ routes or the schema, roughly:
 
 The current code is structured so all of the above lives behind `paymentService`
 and the rest of the stack (routes, frontend, state machine) does not change.
+
+### About "mocked" invoice ingestion
+
+Invoice capture is wired end-to-end but the extraction itself is **mocked**. On
+the create-bill screen, **Upload invoice (mocked)** sends the file to
+`POST /api/bills/extract`, which returns canned structured fields (vendor,
+invoice number, dates, amount, line items) each with a **confidence** score. The
+frontend pre-fills the form, auto-selects the vendor when the extracted name
+matches an existing one, and flags low-confidence fields for the user to verify
+— mimicking a real review queue. The user then submits through the normal
+`POST /api/bills` path; manual entry is unchanged.
+
+The uploaded file is **not persisted**, and there is no new table or migration.
+A real implementation would slot in at the **service layer** behind
+`extractionService.extract(file)` — sending the file to **AWS Textract** or
+**Google Document AI** and mapping the response into the same `ExtractedInvoice`
+shape — with no change to the route, schema, or frontend.
 
 ---
 

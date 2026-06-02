@@ -13,6 +13,7 @@ import { createOrganizationRepo } from "./repositories/organizationRepo.js";
 import { createAuthService } from "./services/authService.js";
 import { createAuthRoutes } from "./routes/authRoutes.js";
 import { createBillService } from "./services/billService.js";
+import { createExtractionService } from "./services/extractionService.js";
 import { createBillRoutes } from "./routes/billRoutes.js";
 import { createApprovalService } from "./services/approvalService.js";
 import { createInvitationRepo } from "./repositories/invitationRepo.js";
@@ -41,6 +42,7 @@ export function createApp(config: Config, db: DB) {
   const orgRepo = createOrganizationRepo(db);
   const authService = createAuthService(userRepo, orgRepo, config.JWT_SECRET);
   const billService = createBillService(db);
+  const extractionService = createExtractionService();
   const approvalService = createApprovalService(db, orgRepo);
   const invitationService = createInvitationService(
     createInvitationRepo(db),
@@ -69,7 +71,7 @@ export function createApp(config: Config, db: DB) {
     .route("/organization", createOrganizationRoutes(organizationService))
     .route("/invitations", createInvitationRoutes(invitationService))
     .route("/vendors", createVendorRoutes(vendorService))
-    .route("/bills", createBillRoutes(billService, approvalService))
+    .route("/bills", createBillRoutes(billService, approvalService, extractionService))
     .route("/activity-log", createActivityLogRoutes(activityLogService))
     .route("/stats", createStatsRoutes(statsService));
 

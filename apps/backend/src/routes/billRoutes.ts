@@ -8,13 +8,16 @@ import {
 } from "@payables/shared";
 import type { BillService } from "../services/billService.js";
 import type { ApprovalService } from "../services/approvalService.js";
+import type { ExtractionService } from "../services/extractionService.js";
 import { requireAdmin, requireApprover, type AuthEnv } from "../middleware/auth.js";
+import { BadRequestError } from "../types/errors.js";
 
 const listQuerySchema = listBillsQuerySchema.extend(paginationQuerySchema.shape);
 
 export function createBillRoutes(
   service: BillService,
   approvalService: ApprovalService,
+  extractionService: ExtractionService,
 ) {
   return new Hono<AuthEnv>()
     .get("/", zValidator("query", listQuerySchema), async (c) => {
@@ -28,6 +31,17 @@ export function createBillRoutes(
       const user = c.get("user");
       const bill = await service.create(c.req.valid("json"), user.id, user.organizationId);
       return c.json(bill, 201);
+    })
+    // Mocked invoice ingestion: accepts an uploaded file (not persisted) and
+    // returns canned structured fields the frontend uses to pre-fill the form.
+    .post("/extract", requireAdmin, async (c) => {
+      const body = await c.req.parseBody();
+      const file = body["file"];
+      if (!(file instanceof File)) {
+        throw new BadRequestError("An invoice file is required");
+      }
+      const extracted = await extractionService.extract(file);
+      return c.json(extracted, 200);
     })
     .get("/:id", async (c) => {
       const bill = await service.getById(c.req.param("id"), c.get("user").organizationId);

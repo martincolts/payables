@@ -23,6 +23,11 @@ export type TestClient = ReturnType<typeof hc<AppType>>;
 export type TestApp = {
   /** Typed RPC client (`client.api.auth.signup.$post(...)`, etc.). */
   client: TestClient;
+  /**
+   * Raw in-process request, for endpoints the typed client can't express (e.g.
+   * `multipart/form-data` uploads). Same app, same routing — no network hop.
+   */
+  request: (input: Request | string | URL, init?: RequestInit) => Promise<Response>;
   /** The isolated test database, exposed for direct assertions when needed. */
   testDb: TestDb;
   /** Ends the pool and drops the throwaway database. Call in `afterAll`. */
@@ -54,7 +59,12 @@ export async function createTestApp(): Promise<TestApp> {
       app.request(input, init),
   });
 
-  return { client, testDb, cleanup: testDb.cleanup };
+  return {
+    client,
+    request: async (input, init) => app.request(input, init),
+    testDb,
+    cleanup: testDb.cleanup,
+  };
 }
 
 /** Bearer-auth options to pass as the second argument of any RPC call. */

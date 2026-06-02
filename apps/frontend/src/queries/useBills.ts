@@ -4,7 +4,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import type { BillStatus, CreateBillInput } from "@payables/shared";
+import type { BillStatus, CreateBillInput, ExtractedInvoice } from "@payables/shared";
 import { api } from "../api/client";
 
 export interface BillsQuery {
@@ -86,6 +86,30 @@ export function useCreateBill() {
       return res.json();
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["bills"] }),
+  });
+}
+
+/**
+ * Mocked invoice ingestion: uploads a file and returns canned structured fields
+ * to pre-fill the create-bill form. Uses a raw `fetch` (the typed RPC client
+ * can't carry a multipart body), mirroring the client's base URL + bearer auth.
+ */
+export function useExtractInvoice() {
+  return useMutation({
+    mutationFn: async (file: File): Promise<ExtractedInvoice> => {
+      const form = new FormData();
+      form.append("file", file);
+      const token = localStorage.getItem("token");
+      const baseUrl = import.meta.env.VITE_API_URL ?? "";
+      const res = await fetch(`${baseUrl}/api/bills/extract`, {
+        method: "POST",
+        credentials: "include",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      });
+      if (!res.ok) throw new Error(await errorMessage(res, "Couldn't read the invoice"));
+      return res.json();
+    },
   });
 }
 

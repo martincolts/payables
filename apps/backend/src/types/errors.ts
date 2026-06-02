@@ -9,6 +9,13 @@ export class DomainError extends Error {
   }
 }
 
+/** Malformed or incomplete request (e.g. a required upload is missing). */
+export class BadRequestError extends DomainError {
+  constructor(message: string) {
+    super(message, 400);
+  }
+}
+
 export class NotFoundError extends DomainError {
   constructor(entity: string, id?: string) {
     super(id ? `${entity} ${id} not found` : `${entity} not found`, 404);
