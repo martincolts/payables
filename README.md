@@ -89,8 +89,8 @@ and the rest of the stack (routes, frontend, state machine) does not change.
 
 There are two paths: **local dev** (run Postgres in Docker, run the
 backend/frontend on your machine for fast iteration) and **full Docker**
-(everything containerized, plus an optional Cloudflare Quick Tunnel that
-gives you a public HTTPS URL with no domain / no account).
+(everything containerized, plus a Tailscale Funnel that gives you a stable
+public HTTPS URL with no domain).
 
 ### Prereqs
 
@@ -132,15 +132,15 @@ statuses. Demo logins (all use password `password123`):
 | `approver2@payables.com` | approver |
 | `approver3@payables.com` | approver |
 
-### Publishing with full Docker + Cloudflare Quick Tunnel
+### Publishing with full Docker + Tailscale Funnel
 
 To run the whole stack (Postgres + backend + nginx-served frontend + a
-public HTTPS URL) on any Linux host with no domain and no Cloudflare
-account:
+**stable** public HTTPS URL) on any Linux host with no domain:
 
 ```bash
 cp .env.example .env
 # Set JWT_SECRET and POSTGRES_PASSWORD at minimum.
+# Set TS_AUTHKEY (reusable key from the Tailscale admin console) and TS_HOSTNAME.
 
 docker compose up -d --build
 ```
@@ -152,27 +152,27 @@ docker compose exec backend pnpm exec drizzle-kit migrate
 docker compose exec backend pnpm exec tsx src/db/seed.ts
 ```
 
-Get the public URL — `cloudflared` prints it to its logs every time it starts:
+The `tailscale` container joins your tailnet and serves the frontend over a
+Funnel. The public URL is derived from `TS_HOSTNAME` + your tailnet, so it is
+**stable and survives restarts** (the device identity is persisted in the
+`tailscale_state` volume):
 
 ```bash
-docker compose logs cloudflared | grep -Eo 'https://[a-z0-9-]+\.trycloudflare\.com'
-# → e.g. https://shiny-otter-vacation-1234.trycloudflare.com
+docker compose exec tailscale tailscale status
+# Public URL: https://<TS_HOSTNAME>.<your-tailnet>.ts.net
 ```
 
 That URL is HTTPS and serves both the SPA and the `/api` backend behind the
-same origin (so no CORS). It **changes every time `cloudflared` restarts** —
-Quick Tunnels are intentionally ephemeral. See [CLOUDFLARE.md](CLOUDFLARE.md)
-for the stable-URL options (named tunnel with a domain, or Tailscale Funnel).
+same origin (so no CORS). See [DEPLOY.md](DEPLOY.md) for full Tailscale
+setup (auth key, Funnel enablement) and a Cloudflare alternative.
 
 #### Current public URL
 
-> https://breach-calculator-publishers-columns.trycloudflare.com/
+> https://payables.<your-tailnet>.ts.net/
 
-> **Note:** this deployment uses the **free** Cloudflare Quick Tunnel, which
-> issues a new random URL every time the container is restarted or redeployed.
-> The link above can therefore stop working without notice. We'll do our best
-> to keep this README updated with the latest URL — if you find it broken,
-> please reach out and we'll share the current one.
+> **Note:** this deployment uses **Tailscale Funnel**, which gives a fixed URL
+> that does not change across restarts or redeploys. Replace
+> `<your-tailnet>` above with your actual tailnet name once deployed.
 
 ---
 
@@ -182,7 +182,7 @@ A short, end-to-end walkthrough of the two flows that exercise the bulk of
 the API. All endpoints are mounted under `/api`; authenticated calls expect
 `Authorization: Bearer <jwt>` returned by `/api/auth/login` or `/api/auth/signup`.
 Replace `$URL` with either `http://localhost:8080` (local dev) or the public
-Cloudflare URL above.
+Tailscale Funnel URL above.
 
 ### Flow 1 — Sign up, create a vendor, create a bill
 

@@ -47,15 +47,33 @@ services:
     depends_on:
       - backend
 
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    container_name: payables-cloudflared
+  tailscale:
+    image: tailscale/tailscale:latest
+    container_name: payables-tailscale
     restart: unless-stopped
-    # Quick Tunnel: free, no account / no domain. Random *.trycloudflare.com URL.
-    # The URL is printed in this container's logs every time it starts.
-    command: tunnel --no-autoupdate --url http://frontend:80
+    # Stable public HTTPS URL via Tailscale Funnel:
+    #   https://${TS_HOSTNAME}.<your-tailnet>.ts.net
+    # Unlike a Cloudflare Quick Tunnel, this URL does NOT change on restart —
+    # it's derived from the device hostname + your tailnet, and the device
+    # identity is persisted in the tailscale_state volume.
+    hostname: ${TS_HOSTNAME:-payables}
+    environment:
+      # Reusable auth key from the Tailscale admin console (Settings → Keys).
+      TS_AUTHKEY: ${TS_AUTHKEY:?TS_AUTHKEY must be set — see DEPLOY.md}
+      TS_STATE_DIR: /var/lib/tailscale
+      # Declarative Funnel: serve frontend:80 on the public 443 funnel.
+      TS_SERVE_CONFIG: /config/funnel.json
+      TS_USERSPACE: "false"
+    volumes:
+      - tailscale_state:/var/lib/tailscale
+      - ./tailscale/funnel.json:/config/funnel.json:ro
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
     depends_on:
       - frontend
 
 volumes:
   postgres_data:
+  tailscale_state:

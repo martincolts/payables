@@ -4,6 +4,7 @@ import {
   Button,
   Card,
   CardContent,
+  Divider,
   Link as MuiLink,
   Stack,
   TextField,
@@ -14,6 +15,13 @@ import { toast } from "react-toastify";
 import { useAuth } from "../auth/AuthContext";
 import { useLogin } from "../queries/useAuth";
 
+/** Seeded demo accounts (see apps/backend/src/db/seed.ts) — all use this password. */
+const DEMO_PASSWORD = "password123";
+const DEMO_ACCOUNTS = [
+  { label: "Admin", email: "admin@payables.com" },
+  { label: "Approver", email: "approver@payables.com" },
+] as const;
+
 export function Login() {
   const navigate = useNavigate();
   const { setSession } = useAuth();
@@ -21,19 +29,20 @@ export function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
+  const signIn = (credentials: { email: string; password: string }) => {
+    login.mutate(credentials, {
+      onSuccess: (res) => {
+        setSession(res);
+        toast.success(`Welcome back, ${res.user.name}!`);
+        navigate("/", { replace: true });
+      },
+      onError: (err) => toast.error(err.message),
+    });
+  };
+
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
-    login.mutate(
-      { email, password },
-      {
-        onSuccess: (res) => {
-          setSession(res);
-          toast.success(`Welcome back, ${res.user.name}!`);
-          navigate("/", { replace: true });
-        },
-        onError: (err) => toast.error(err.message),
-      },
-    );
+    signIn({ email, password });
   };
 
   return (
@@ -94,6 +103,29 @@ export function Login() {
               </Button>
             </Stack>
           </Box>
+          <Divider sx={{ my: 3 }}>
+            <Typography variant="caption" color="text.secondary">
+              Demo accounts
+            </Typography>
+          </Divider>
+          <Stack direction="row" spacing={1}>
+            {DEMO_ACCOUNTS.map((account) => (
+              <Button
+                key={account.email}
+                variant="outlined"
+                fullWidth
+                disabled={login.isPending}
+                onClick={() =>
+                  signIn({ email: account.email, password: DEMO_PASSWORD })
+                }
+              >
+                {account.label}
+              </Button>
+            ))}
+          </Stack>
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
+            One-click sign in to explore each role — no password needed.
+          </Typography>
           <Typography variant="body2" sx={{ mt: 3 }}>
             Don't have an account?{" "}
             <MuiLink component={RouterLink} to="/signup">

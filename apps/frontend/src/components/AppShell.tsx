@@ -4,6 +4,7 @@ import {
   Avatar,
   Box,
   Button,
+  Chip,
   Divider,
   Drawer,
   IconButton,
@@ -86,9 +87,19 @@ export function AppShell({ children }: { children: ReactNode }) {
             {user?.name?.charAt(0).toUpperCase() ?? "?"}
           </Avatar>
           <Box sx={{ minWidth: 0 }}>
-            <Typography variant="body2" noWrap>
-              {user?.name}
-            </Typography>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+              <Typography variant="body2" noWrap>
+                {user?.name}
+              </Typography>
+              {user?.role && (
+                <Chip
+                  label={user.role}
+                  size="small"
+                  color={user.role === "admin" ? "primary" : "default"}
+                  sx={{ height: 18, textTransform: "capitalize", "& .MuiChip-label": { px: 0.75 } }}
+                />
+              )}
+            </Box>
             <Typography variant="caption" color="text.secondary" noWrap component="div">
               {user?.email}
             </Typography>
