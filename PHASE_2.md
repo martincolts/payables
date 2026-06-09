@@ -75,6 +75,32 @@ The README already lists "what was left out" — that's a **gift**: it's a pre-v
 | A3 | **Duplicate-invoice detection** (warn on same vendor+invoice#+amount) | Echoes John's fraud/abuse background | `billService`, repo query, test |
 | A4 | **Scheduled jobs / overdue flagging** (cron worker: `scheduled → paid` on date, overdue reminders) | Shows you understand background work + idempotency | new worker, service |
 | A5 | **Approval automations** (auto-approve under $X from trusted vendor; route by amount band) | Layers on the existing state machine | `billStateMachine`, `approvalService` |
+| A6 | **Targeted approvers + approval rules** (tag specific users on a bill; mandatory-approver rules per user or per vendor) | Adds controls sophistication and shows you can extend a state machine cleanly | new `approval_rules` schema, `approvalRulesRepo`, `approvalRulesService`, rule-check hook in `approvalService.submitDecision`, frontend rules config + bill approvers UI |
+
+#### A6 — Targeted approvers + approval rules (detail)
+
+Three sub-features that form one coherent slice:
+
+1. **Tag a user on a specific bill** (`bill_required_approvers` join table: `billId`, `userId`).
+   - Admin or bill creator can add/remove tagged approvers before the bill enters `pending_approval`.
+   - The `summarize` response adds a `requiredApprovers` list; the frontend shows them alongside the quorum bar.
+   - When the bill reaches quorum *and* every tagged approver has approved, it transitions to `approved`. Either condition alone is not enough.
+
+2. **Org-level approval rules** (`approval_rules` table: `id`, `organizationId`, `type`, `subjectUserId?`, `vendorId?`, `priority`, `createdAt`).
+   - `type: "mandatory_user"` — a specific user must approve every bill in the org.
+   - `type: "mandatory_for_vendor"` — a specific user must approve every bill from a given vendor.
+   - Rules are evaluated when a bill is submitted for approval: `approvalService` derives the effective required-approver set (org quorum + rules + any bill-level tags) and writes the union into `bill_required_approvers` automatically.
+   - Frontend: an "Approval Rules" settings page (admin only) to create/delete rules (list is paginated).
+
+3. **Dual-control / "plus one" rule** (`type: "mandatory_plus_one"` on `approval_rules`): a named mandatory approver (`subjectUserId`) must approve *plus* at least one other distinct approver. This is enforced in `approvalService.submitDecision`: even after the named user approves, the quorum check counts only towards `approved` once a second distinct user has also approved.
+
+**Implementation sketch (layered architecture):**
+- **Schema:** `approval_rules` table + `bill_required_approvers` join table (both scoped by `organizationId` / `billId`).
+- **Repo:** `approvalRulesRepo` (CRUD + `listByOrg`) + `billRequiredApproversRepo` (set/get per bill).
+- **Service:** `approvalRulesService` (manage rules); extend `approvalService.submitDecision` to re-check the effective required-approver set and only flip to `approved` when both quorum and all required approvers are satisfied.
+- **Routes:** `GET/POST/DELETE /api/approval-rules` (admin); `POST/DELETE /api/bills/:id/required-approvers` (admin/creator).
+- **Tests:** `approvalRulesRepo.test.ts`, `approvalRules.integration.test.ts`, update `approvals.integration.test.ts` for the new gate.
+- **Frontend:** rules settings page, bill detail shows tagged approvers + per-approver status badges.
 
 ### Tier B — payments depth (John = ex-Stripe)
 | # | Feature | Why |
