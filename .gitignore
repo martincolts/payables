@@ -40,3 +40,5 @@ coverage/
 .vitest/
 
 .claude/settings.local.json
+
+.continue/
